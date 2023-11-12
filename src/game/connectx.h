@@ -49,7 +49,7 @@ public:
     return mTop;
   }
 
-  bool is_valid(Pt pt) const {
+  bool is_valid(Player player, Pt pt) const {
     if (pt.c >= CZ)       return false;
     if (mTop[pt.c] >= RZ) return false;
     else                  return true;
@@ -59,7 +59,7 @@ public:
     return mBoard[index<CZ>(pt)];
   }
   void place(Player player, Pt pt){
-    assert(is_valid(pt));
+    assert(is_valid(player, pt));
     ubyte topr = mTop[pt.c];
     mBoard[index<CZ>(Pt(topr, pt.c))] = player;
     mTop[pt.c] += 1;
@@ -136,12 +136,13 @@ public:
   Player next_player() const {
     return mNPlayer;
   }
-  bool is_valid(Move m) const {
+  bool is_valid(PlayerMove pm) const {
     if (is_terminal()) return false;
-    switch (m.mty){
+    switch (pm.move.mty){
     break; case M::Play:
-      return mBoard.is_valid(m.mpt);
-    break; case M::Resign:
+      return mBoard.is_valid(pm.player, pm.move.mpt);
+    break; case M::Pass:
+           case M::Resign:
            case M::Unknown:
       return false;
     }
@@ -150,13 +151,13 @@ public:
     if (is_terminal()) return s::vector<Move>();
     s::vector<Move> moves;
     for (int c = 0; c < CZ; ++c)
-      if (mBoard.is_valid(Pt(0,c)))
+      if (mBoard.is_valid(mNPlayer, Pt(0,c)))
         moves.push_back(Move(M::Play, Pt(0,c)));
     return moves;
   }
   ConnectXGameState& apply(PlayerMove pm){
     assert(not is_terminal());
-    if (not is_valid(pm.move)) return *this;
+    if (not is_valid(pm)) return *this;
     mBoard.place(pm.player, pm.move.mpt);
     mHistory.push_back(pm);
     mNPlayer = opponent(mNPlayer);

@@ -10,8 +10,8 @@ namespace s = std;
 
 template <typename Sub>
 struct Board {
-  bool is_valid(Pt pt) const {
-    return static_cast<Sub*>(this)->is_valid(pt);
+  bool is_valid(Player player, Pt pt) const {
+    return static_cast<Sub*>(this)->is_valid(player, pt);
   }
   Player operator[](Pt pt) const {
     return static_cast<Sub*>(this)->operator[](pt);
@@ -35,8 +35,8 @@ struct GameState {
   Player next_player() const {
     return static_cast<Sub*>(this)->next_player();
   }
-  bool is_valid(Move m) const {
-    return static_cast<Sub*>(this)->is_valid();
+  bool is_valid(PlayerMove pm) const {
+    return static_cast<Sub*>(this)->is_valid(pm);
   }
   s::vector<Move> legal_moves() const {
     return static_cast<Sub*>(this)->legal_moves();

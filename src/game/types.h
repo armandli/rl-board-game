@@ -2,6 +2,8 @@
 #define RLBG_TYPES
 
 #include <cassert>
+#include <array>
+#include <functional>
 #include <ostream>
 
 #include <type_alias.h>
@@ -10,12 +12,34 @@ namespace rlbg {
 
 namespace s = std;
 
+struct Direction {
+  byte r, c;
+
+  Direction() = default;
+  constexpr Direction(byte r, byte c) noexcept: r(r), c(c) {}
+};
+
 struct Pt {
   ubyte r, c;
 
   Pt() = default;
   Pt(ubyte r, ubyte c): r(r), c(c) {}
+
+  Pt& operator+=(Direction d){
+    r += d.r;
+    c += d.c;
+    return *this;
+  }
+
+  Pt& operator-=(Direction d){
+    r -= d.r;
+    c -= d.c;
+    return *this;
+  }
 };
+
+using Neighbours4 = s::array<Pt, 4>;
+using Neighbours8 = s::array<Pt, 8>;
 
 bool operator==(Pt a, Pt b){
   return a.r == b.r && a.c == b.c;
@@ -35,10 +59,69 @@ template <uint SZ>
   return Pt(idx / SZ, idx % SZ);
 }
 
-//TODO: may also need skip ?
+
+bool operator==(Direction a, Direction b){
+  return a.r == b.r && a.c == b.c;
+}
+
+bool operator!=(Direction a, Direction b){
+  return not operator==(a, b);
+}
+
+Pt operator+(Pt pt, Direction d){
+  return Pt(pt.r+d.r, pt.c+d.c);
+}
+
+Pt operator-(Pt pt, Direction d){
+  return Pt(pt.r-d.r, pt.c-d.c);
+}
+
+constexpr s::array<Direction, 8> EIGHT_WAY {
+  Direction( 1, 0),
+  Direction( 1, 1),
+  Direction( 0, 1),
+  Direction(-1, 1),
+  Direction(-1, 0),
+  Direction(-1,-1),
+  Direction( 0,-1),
+  Direction( 1,-1),
+};
+
+[[gnu::always_inline]] Neighbours4 neighbours(Pt p){
+  return Neighbours4{
+    Pt(p.r-1, p.c),
+    Pt(p.r,   p.c-1),
+    Pt(p.r+1, p.c),
+    Pt(p.r,   p.c+1),
+  };
+}
+
+[[gnu::always_inline]] Neighbours4 corners(Pt p){
+  return Neighbours4{
+    Pt(p.r-1, p.c-1),
+    Pt(p.r+1, p.c-1),
+    Pt(p.r-1, p.c+1),
+    Pt(p.r+1, p.c+1),
+  };
+}
+
+[[gnu::always_inline]] Neighbours8 surroundings(Pt p){
+  return Neighbours8{
+    Pt(p.r-1, p.c),
+    Pt(p.r-1, p.c+1),
+    Pt(p.r,   p.c+1),
+    Pt(p.r+1, p.c+1),
+    Pt(p.r+1, p.c),
+    Pt(p.r+1, p.c-1),
+    Pt(p.r,   p.c-1),
+    Pt(p.r-1, p.c-1),
+  };
+}
+
 enum class M : ubyte {
   Play    = 0x1,
-  Resign  = 0x2,
+  Pass    = 0x2,
+  Resign  = 0x3,
   Unknown = 0x0,
 };
 
@@ -62,6 +145,7 @@ bool operator==(const Move& a, const Move& b){
   switch (a.mty){
   case M::Play:
     return a.mty == b.mty && a.mpt == b.mpt;
+  case M::Pass:
   case M::Resign:
   case M::Unknown:
     return a.mty == b.mty;
@@ -76,7 +160,7 @@ bool operator!=(const Move& a, const Move& b){
 enum class Player: ubyte {
   Black   = 0x1,
   White   = 0x2,
-  Unknown = 0x3,
+  Unknown = 0x3, //can used to represent empty
 };
 
 [[gnu::always_inline]] Player opponent(Player player){
@@ -114,5 +198,16 @@ bool operator!=(const PlayerMove& a, const PlayerMove& b){
 }
 
 } // rlbg
+
+namespace r = rlbg;
+
+namespace std {
+template <>
+struct hash<r::Pt> {
+  size_t operator()(const r::Pt& pt) const {
+    return (pt.r << 8U) + pt.c;
+  }
+};
+} // std
 
 #endif//RLBG_TYPES

@@ -11,7 +11,7 @@ using Game = r::ConnectXGameState<6,7,4>;
 
 r::Pt read_input(const Game& state){
   int col; s::cin >> col;
-  while (not state.is_valid(r::Move(r::M::Play, r::Pt(0, col)))){
+  while (not state.is_valid(r::PlayerMove(state.next_player(), r::Move(r::M::Play, r::Pt(0, col))))){
     s::cin >> col;
   }
   return r::Pt(0, col);
