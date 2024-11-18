@@ -1,6 +1,6 @@
 #!/bin/sh
 
-rm -rf build
+rm -rf build 2>/dev/null
 mkdir build
 cd build
 

@@ -12,11 +12,11 @@ namespace rlbg {
 
 namespace s = std;
 
-struct Direction {
+struct Dr {
   byte r, c;
 
-  Direction() = default;
-  constexpr Direction(byte r, byte c) noexcept: r(r), c(c) {}
+  Dr() = default;
+  constexpr Dr(byte r, byte c) noexcept: r(r), c(c) {}
 };
 
 struct Pt {
@@ -25,13 +25,13 @@ struct Pt {
   Pt() = default;
   Pt(ubyte r, ubyte c): r(r), c(c) {}
 
-  Pt& operator+=(Direction d){
+  Pt& operator+=(Dr d){
     r += d.r;
     c += d.c;
     return *this;
   }
 
-  Pt& operator-=(Direction d){
+  Pt& operator-=(Dr d){
     r -= d.r;
     c -= d.c;
     return *this;
@@ -60,31 +60,31 @@ template <uint SZ>
 }
 
 
-bool operator==(Direction a, Direction b){
+bool operator==(Dr a, Dr b){
   return a.r == b.r && a.c == b.c;
 }
 
-bool operator!=(Direction a, Direction b){
+bool operator!=(Dr a, Dr b){
   return not operator==(a, b);
 }
 
-Pt operator+(Pt pt, Direction d){
+Pt operator+(Pt pt, Dr d){
   return Pt(pt.r+d.r, pt.c+d.c);
 }
 
-Pt operator-(Pt pt, Direction d){
+Pt operator-(Pt pt, Dr d){
   return Pt(pt.r-d.r, pt.c-d.c);
 }
 
-constexpr s::array<Direction, 8> EIGHT_WAY {
-  Direction( 1, 0),
-  Direction( 1, 1),
-  Direction( 0, 1),
-  Direction(-1, 1),
-  Direction(-1, 0),
-  Direction(-1,-1),
-  Direction( 0,-1),
-  Direction( 1,-1),
+constexpr s::array<Dr, 8> EIGHT_WAY {
+  Dr( 1, 0),
+  Dr( 1, 1),
+  Dr( 0, 1),
+  Dr(-1, 1),
+  Dr(-1, 0),
+  Dr(-1,-1),
+  Dr( 0,-1),
+  Dr( 1,-1),
 };
 
 [[gnu::always_inline]] Neighbours4 neighbours(Pt p){

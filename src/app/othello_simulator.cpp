@@ -1,33 +1,67 @@
 #include <cassert>
-#include <iostream>
 
 #include <types.h>
 #include <othello.h>
 
+#include <sstream>
+#include <iostream>
+
+#include <thread>
+#include <chrono>
+
+#include <curses.h>
+
 namespace s = std;
 namespace r = rlbg;
 
-using Game = r::OthelloGameState<8>;
+constexpr ubyte SZ = 8;
 
-r::Move read_input(const Game& state){
-  int row, col; s::cin >> row >> col;
-  if (row < 0 or col < 0) return r::Move(r::M::Pass);
-  while (not state.is_valid(r::PlayerMove(state.next_player(), r::Move(r::M::Play, r::Pt(row, col))))){
-    s::cout << "Invalid coordinate! Again: ";
-    s::cin >> row >> col;
-  }
-  return r::Move(r::M::Play, r::Pt(row, col));
-}
+using Game = r::OthelloGameState<SZ>;
 
-int main(int argc, const char* argv[]){
+int main(){
+  s::cout << "press any key to continue" << s::endl;
+
+  s::this_thread::sleep_for(s::chrono::milliseconds(1000));
+
+  initscr();
+  cbreak();
+  noecho();
+
+  WINDOW* win = newwin(SZ+2, SZ+6, 0, 0);
+
+  int rowi = getch(), coli;
+
+  //wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
+
   Game game_state;
   while (not game_state.is_terminal()){
-    s::cout << game_state.board();
-    s::cout << game_state.next_player() << " Play: ";
-    r::Move play = read_input(game_state);
+    s::stringstream outstream;
+    game_state.board().print(outstream);
+
+    int row_id = 1;
+    wmove(win, row_id, 0);
+    for (char c : outstream.str()){
+      switch (c){
+      break; case '\n':
+        row_id++;
+        wmove(win, row_id, 0);
+      break; default:
+        waddch(win, c);
+      }
+    }
+    wrefresh(win);
+
+    do {
+      rowi = getch();
+      coli = getch();
+      rowi -= '0';
+      coli -= '0';
+    //TODO: can't specify pass!
+    } while (not game_state.is_valid(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, r::Pt(rowi, coli))))); 
+
+    r::Move play(r::M::Play, r::Pt(rowi, coli));
     game_state.apply(r::PlayerMove(game_state.next_player(), play));
   }
-  s::cout << game_state.board();
-  s::cout << "Winner: " << game_state.winner() << s::endl;
-  return 0;
+
+  delwin(win);
 }

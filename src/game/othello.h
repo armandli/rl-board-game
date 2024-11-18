@@ -106,7 +106,7 @@ public:
     assert(is_valid(player, pt));
     // scan 8 directions, and flip opponent pieces if caught in between
     mBoard[index<SZ>(pt)] = player;
-    for (Direction d : EIGHT_WAY){
+    for (Dr d : EIGHT_WAY){
       Pt bp = pt + d;
       flip_stack(player, bp, d);
     }
@@ -176,7 +176,7 @@ protected:
     if (not is_on_board(pt)) return false;
     if (mBoard[index<SZ>(pt)] != Player::Unknown) return false;
 
-    for (Direction d : EIGHT_WAY){
+    for (Dr d : EIGHT_WAY){
       bool found_opponent = false;
       for (Pt p = pt + d; is_on_board(p); p += d){
         if (mBoard[index<SZ>(p)] == Player::Unknown)
@@ -193,7 +193,7 @@ protected:
     }
     return false;
   }
-  Player flip_stack(Player player, Pt pt, Direction d){
+  Player flip_stack(Player player, Pt pt, Dr d){
     if (not is_on_board(pt)) return opponent(player);
     if (mBoard[index<SZ>(pt)] == Player::Unknown) return opponent(player);
     if (mBoard[index<SZ>(pt)] == player) return player;
