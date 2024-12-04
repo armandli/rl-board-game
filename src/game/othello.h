@@ -7,6 +7,7 @@
 
 #include <type_alias.h>
 #include <types.h>
+#include <zobrist_hash.h>
 #include <game_base.h>
 
 namespace rlbg {
@@ -138,8 +139,20 @@ public:
       }
     }
   }
+  // assume only reverting the last step
+  void revert(Pt pt){
+    //TODO
+  }
   size_t size() const {
     return IZ;
+  }
+  size_t hash() const {
+    size_t h = 0;
+    for (uint i = 0; i < mBoard.size(); ++i){
+      if (mBoard[i] != Player::Unknown)
+        h ^= zobrist_hash((uint)mBoard[i], i);
+    }
+    return h;
   }
   s::ostream& print(s::ostream& out) const {
     char bchar = 'X';
@@ -270,10 +283,10 @@ public:
       moves.push_back(Move(M::Play, pt));
     return moves;
   }
-  OthelloGameState& apply(PlayerMove pm){
-    if (is_terminal())    return *this;
-    if (not is_valid(pm)) return *this;
-    if (pm.player != mNPlayer) return *this;
+  bool apply(PlayerMove pm){
+    if (is_terminal())    return false;
+    if (not is_valid(pm)) return false;
+    if (pm.player != mNPlayer) return false;
     switch (pm.move.mty){
     break; case M::Play:
       mBoard.place(pm.player, pm.move.mpt);
@@ -292,20 +305,23 @@ public:
           mWinner = Player::White;
         }
       }
-      return *this;
+      return true;
     break; case M::Pass:
       mNPlayer = opponent(mNPlayer);
       mHistory.push_back(pm);
-      return *this;
+      return true;
     break; case M::Resign:
       mTerminal = true;
       mWinner = opponent(pm.player);
       mHistory.push_back(pm);
-      return *this;
+      return true;
     break; case M::Unknown:
            default:
-      return *this;
+      return false;
     }
+  }
+  void rollback(int steps){
+    //TODO
   }
   bool is_terminal() const {
     return mTerminal;
@@ -320,6 +336,11 @@ public:
     else if (w == player)     return 1;
     else                      return -1;
   }
+  size_t hash() const {
+    size_t h = mBoard.hash();
+    h ^= zobrist_hash((uint)mNPlayer);
+    return h;
+  }
   const s::vector<PlayerMove>& history() const {
     return mHistory;
   }
@@ -331,5 +352,22 @@ protected:
 };
 
 } // rlbg
+
+namespace r = rlbg;
+
+namespace std {
+template <ubyte SZ>
+struct hash<r::OthelloBoard<SZ>> {
+  size_t operator()(const r::OthelloBoard<SZ>& board) const {
+    return board.hash();
+  }
+};
+template <ubyte SZ>
+struct hash<r::OthelloGameState<SZ>> {
+  size_t operator()(const r::OthelloGameState<SZ>& state) const {
+    return state.hash();
+  }
+}; 
+} // std
 
 #endif//RLBG_OTHELLO

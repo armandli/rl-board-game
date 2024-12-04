@@ -19,11 +19,19 @@ struct Dr {
   constexpr Dr(byte r, byte c) noexcept: r(r), c(c) {}
 };
 
+bool operator==(Dr a, Dr b){
+  return a.r == b.r && a.c == b.c;
+}
+
+bool operator!=(Dr a, Dr b){
+  return not operator==(a, b);
+}
+
 struct Pt {
-  ubyte r, c;
+  byte r, c;
 
   Pt() = default;
-  Pt(ubyte r, ubyte c): r(r), c(c) {}
+  Pt(byte r, byte c): r(r), c(c) {}
 
   Pt& operator+=(Dr d){
     r += d.r;
@@ -49,6 +57,11 @@ bool operator!=(Pt a, Pt b){
   return not operator==(a, b);
 }
 
+s::ostream& operator<<(s::ostream& out, const Pt& pt){
+  out << "(" << (int)pt.r << "," << (int)pt.c << ")";
+  return out;
+}
+
 template <uint SZ>
 [[gnu::always_inline]] uint index(Pt p){
   return p.r * SZ + p.c;
@@ -59,21 +72,16 @@ template <uint SZ>
   return Pt(idx / SZ, idx % SZ);
 }
 
-
-bool operator==(Dr a, Dr b){
-  return a.r == b.r && a.c == b.c;
+Pt operator+(Pt pt, Dr dr){
+  return Pt(pt.r+dr.r, pt.c+dr.c);
 }
 
-bool operator!=(Dr a, Dr b){
-  return not operator==(a, b);
+Pt operator+(Dr dr, Pt pt){
+  return operator+(pt, dr);
 }
 
-Pt operator+(Pt pt, Dr d){
-  return Pt(pt.r+d.r, pt.c+d.c);
-}
-
-Pt operator-(Pt pt, Dr d){
-  return Pt(pt.r-d.r, pt.c-d.c);
+Pt operator-(Pt pt, Dr dr){
+  return Pt(pt.r-dr.r, pt.c-dr.c);
 }
 
 constexpr s::array<Dr, 8> EIGHT_WAY {
@@ -206,6 +214,13 @@ template <>
 struct hash<r::Pt> {
   size_t operator()(const r::Pt& pt) const {
     return (pt.r << 8U) + pt.c;
+  }
+};
+template <>
+struct hash<r::Move> {
+  size_t operator()(const r::Move& move) const {
+    // temporary solution
+    return hash<r::Pt>()(move.mpt);
   }
 };
 } // std
