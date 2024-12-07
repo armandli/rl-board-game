@@ -80,6 +80,30 @@ void generate_player_hash_table(s::fstream& out, size_t player_size, s::unordere
   out << "}\n";
 }
 
+void generate_pass_hash(s::fstream& out, s::unordered_set<uint>& used){
+  s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
+
+  out << "\n";
+  out << "constexpr uint PASS_HASH = 0x";
+
+  uint hash_value = get_next_value(dist, used);
+
+  out << s::hex << hash_value << "U;\n";
+  out << "\n";
+}
+
+void generate_resign_hash(s::fstream& out, s::unordered_set<uint>& used){
+  s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
+
+  out << "\n";
+  out << "constexpr uint RESIGN_HASH = 0x";
+
+  uint hash_value = get_next_value(dist, used);
+
+  out << s::hex << hash_value << "U;\n";
+  out << "\n";
+}
+
 void generate_file_suffix(s::fstream& out){
   out << "\n";
   out << "constexpr uint EMPTY_BOARD = 0U;\n";
@@ -110,6 +134,8 @@ int main(int argc, char* argv[]){
   generate_file_includes(output, player_size, table_size);
   generate_board_hash_table(output, player_size, table_size, used);
   generate_player_hash_table(output, player_size, used);
+  generate_pass_hash(output, used);
+  generate_resign_hash(output, used);
   generate_file_suffix(output);
   output << s::endl;
 

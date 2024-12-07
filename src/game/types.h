@@ -165,6 +165,16 @@ bool operator!=(const Move& a, const Move& b){
   return not operator==(a, b);
 }
 
+s::ostream& operator<<(s::ostream& out, const Move& move){
+  switch (move.mty){
+  break; case M::Play:   out << move.mpt;
+  break; case M::Pass:   out << "Pass";
+  break; case M::Resign: out << "Resign";
+  break; case M::Unknown: default: assert(false);
+  }
+  return out;
+}
+
 enum class Player: ubyte {
   Black   = 0x1,
   White   = 0x2,

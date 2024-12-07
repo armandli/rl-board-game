@@ -2,20 +2,27 @@
 
 #include <types.h>
 #include <connectx.h>
-#include <minimax_search.h>
+#include <mcgs_search.h>
 
 #include <iostream>
 
 namespace s = std;
 namespace r = rlbg;
 
-constexpr ubyte RSZ = 5;
-constexpr ubyte CSZ = 5;
+constexpr ubyte RSZ = 6;
+constexpr ubyte CSZ = 7;
 
-using Game = r::ConnectXGameState<RSZ,CSZ,3>;
+using Game = r::ConnectXGameState<RSZ,CSZ,4>;
 
 int main(){
   char input;
+
+  r::MCPlayout<r::ConnectXBoard<RSZ,CSZ>,Game> playout(16);
+  r::UCTSelector<
+    r::ConnectXBoard<RSZ,CSZ>,
+    Game
+  > selector(0.1);
+  r::NullCollector<r::ConnectXBoard<RSZ,CSZ>,Game> collector;
 
   bool is_player_move = false;
   Game game_state;
@@ -31,7 +38,7 @@ int main(){
       r::Pt pt(0, input);
       game_state.apply(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, pt)));
     } else {
-      r::Move move = r::minimax_search_ab(game_state);
+      r::Move move = r::mcgs_search(game_state, selector, playout, collector, 64);
       game_state.apply(r::PlayerMove(game_state.next_player(), move));
     }
     is_player_move = not is_player_move;
