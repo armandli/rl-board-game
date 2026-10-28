@@ -1,6 +1,10 @@
-#include <cassert>
+#include <sstream>
+#include <string>
+#include <vector>
 
-#include <iostream>
+#include <ftxui/component/app.hpp>
+#include <ftxui/component/component.hpp>
+#include <ftxui/dom/elements.hpp>
 
 #include <types.h>
 #include <connectx.h>
@@ -8,15 +12,42 @@
 
 namespace s = std;
 namespace r = rlbg;
+namespace fx = ftxui;
 
 constexpr ubyte RSZ = 6;
 constexpr ubyte CSZ = 7;
 
 using Game = r::ConnectXGameState<RSZ,CSZ,4>;
 
-int main(){
-  char input;
+fx::Element render_board(const Game& game){
+  const auto& board = game.board();
+  s::vector<fx::Element> rows;
+  for (int ri = (int)RSZ-1; ri >= 0; --ri){
+    s::vector<fx::Element> cells;
+    cells.push_back(fx::text("|"));
+    for (uint ci = 0; ci < CSZ; ++ci){
+      switch (board[r::Pt(ri, ci)]){
+      case r::Player::Black:
+        cells.push_back(fx::text("X") | fx::color(fx::Color::Red));
+        break;
+      case r::Player::White:
+        cells.push_back(fx::text("O") | fx::color(fx::Color::Blue));
+        break;
+      default:
+        cells.push_back(fx::text(" "));
+      }
+    }
+    cells.push_back(fx::text("|"));
+    rows.push_back(fx::hbox(s::move(cells)));
+  }
+  s::string col_line = " ";
+  for (uint ci = 0; ci < CSZ; ++ci)
+    col_line += s::to_string(ci);
+  rows.push_back(fx::text(col_line));
+  return fx::vbox(s::move(rows));
+}
 
+int main(){
   r::MCPlayout<r::ConnectXBoard<RSZ,CSZ>,Game> playout(16);
   r::UCTSelector<
     r::ConnectXBoard<RSZ,CSZ>,
@@ -24,26 +55,88 @@ int main(){
   > selector(0.1);
   r::NullCollector<r::ConnectXBoard<RSZ,CSZ>,Game> collector;
 
-  bool is_player_move = false;
   Game game_state;
-  while (not game_state.is_terminal()){
-    s::cout << game_state.board() << s::endl;
+  s::string input_str;
+  s::string status_msg;
+  bool game_over = false;
 
-    if (is_player_move){
-      do {
-        s::cin >> input;
-        input -= '0';
-      } while (not game_state.is_valid(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, r::Pt(0, input)))));
-
-      r::Pt pt(0, input);
-      game_state.apply(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, pt)));
-    } else {
-      r::Move move = r::mcgs_search(game_state, selector, playout, collector, 64);
-      game_state.apply(r::PlayerMove(game_state.next_player(), move));
-    }
-    is_player_move = not is_player_move;
+  // AI (Black) goes first
+  {
+    r::Move ai_move = r::mcgs_search(game_state, selector, playout, collector, 64);
+    game_state.apply(r::PlayerMove(game_state.next_player(), ai_move));
   }
 
-  s::cout << game_state.board();
-  s::cout << "winner=" << game_state.winner() << s::endl;
+  if (game_state.is_terminal()){
+    game_over = true;
+    s::stringstream ss;
+    ss << game_state.winner();
+    status_msg = ss.str() + " wins! Press Enter to exit.";
+  } else {
+    status_msg = "Your turn (White). Enter column (0-6):";
+  }
+
+  auto app = fx::App::TerminalOutput();
+  auto exit_fn = app.ExitLoopClosure();
+
+  fx::InputOption input_opt;
+  input_opt.on_enter = [&](){
+    if (game_over){
+      exit_fn();
+      return;
+    }
+    if (input_str.empty()) return;
+
+    char ch = input_str[0];
+    input_str.clear();
+
+    if (ch < '0' or ch > '9'){
+      status_msg = "Invalid input. Enter a column number (0-6):";
+      return;
+    }
+    int col = ch - '0';
+    r::PlayerMove pm(
+      game_state.next_player(),
+      r::Move(r::M::Play, r::Pt(0, col))
+    );
+    if (not game_state.is_valid(pm)){
+      status_msg = "Column " + s::to_string(col) + " is full or out of range. Try again:";
+      return;
+    }
+    game_state.apply(pm);
+
+    if (game_state.is_terminal()){
+      game_over = true;
+    } else {
+      r::Move ai_move = r::mcgs_search(game_state, selector, playout, collector, 64);
+      game_state.apply(r::PlayerMove(game_state.next_player(), ai_move));
+      if (game_state.is_terminal())
+        game_over = true;
+    }
+
+    if (game_over){
+      s::stringstream ss;
+      r::Player w = game_state.winner();
+      if (w == r::Player::Unknown)
+        status_msg = "Draw! Press Enter to exit.";
+      else {
+        ss << w;
+        status_msg = ss.str() + " wins! Press Enter to exit.";
+      }
+    } else {
+      status_msg = "Your turn (White). Enter column (0-6):";
+    }
+  };
+
+  auto input_comp = fx::Input(&input_str, "column", input_opt);
+
+  auto renderer = fx::Renderer(input_comp, [&]() -> fx::Element {
+    return fx::vbox({
+      render_board(game_state),
+      fx::separator(),
+      fx::text(status_msg),
+      fx::hbox({fx::text("> "), input_comp->Render()}),
+    });
+  });
+
+  app.Loop(renderer);
 }
