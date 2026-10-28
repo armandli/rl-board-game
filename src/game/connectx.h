@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <cstring>
 #include <ostream>
 
 #include <type_alias.h>
@@ -300,6 +301,7 @@ public:
            case M::Unknown:
       return false;
     }
+    return false;
   }
   s::vector<Move> legal_moves() const {
     if (is_terminal()) return s::vector<Move>();

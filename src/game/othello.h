@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <array>
+#include <cstring>
 #include <unordered_set>
 
 #include <type_alias.h>
