@@ -1,13 +1,12 @@
 #ifndef RLBG_MINIMAX_SEARCH
 #define RLBG_MINIMAX_SEARCH
 
+#include <algorithm>
+#include <iostream>
+
 #include <type_alias.h>
 #include <types.h>
 #include <game_base.h>
-
-#include <algorithm>
-
-#include <iostream>
 
 namespace s = std;
 
@@ -108,6 +107,6 @@ Move minimax_search_ab(GameState<Board,Sub>& state){
   return move;
 }
 
-} // rlbg
+}  // namespace rlbg
 
 #endif//RLBG_MINIMAX_SEARCH

@@ -1,9 +1,10 @@
 #include <ctime>
+
+#include <fstream>
+#include <iostream>
 #include <random>
 #include <string>
 #include <unordered_set>
-#include <iostream>
-#include <fstream>
 
 #include <type_alias.h>
 
@@ -14,7 +15,7 @@ s::default_random_engine& get_default_random_engine(){
   static s::default_random_engine engine(time(0));
   return engine;
 }
-} // namespace
+}  // namespace
 
 void generate_file_includes(s::fstream& out, size_t player_size, size_t table_size){
   out << "/* This file is auto-generated */\n";
@@ -37,7 +38,12 @@ uint get_next_value(s::uniform_int_distribution<uint>& dist, s::unordered_set<ui
   return value;
 }
 
-void generate_board_hash_table(s::fstream& out, size_t player_size, size_t table_size, s::unordered_set<uint>& used){
+void generate_board_hash_table(
+    s::fstream& out,
+    size_t player_size,
+    size_t table_size,
+    s::unordered_set<uint>& used)
+{
   s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
 
   out << "uint zobrist_hash(uint player, uint p_index){\n";
@@ -56,12 +62,16 @@ void generate_board_hash_table(s::fstream& out, size_t player_size, size_t table
     }
   }
   out << "    default: assert(false);\n";
-  
+
   out << "  }\n";
   out << "}\n";
 }
 
-void generate_player_hash_table(s::fstream& out, size_t player_size, s::unordered_set<uint>& used){
+void generate_player_hash_table(
+    s::fstream& out,
+    size_t player_size,
+    s::unordered_set<uint>& used)
+{
   s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
 
   out << "uint zobrist_hash(uint player){\n";

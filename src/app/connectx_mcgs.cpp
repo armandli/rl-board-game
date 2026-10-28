@@ -1,10 +1,10 @@
 #include <cassert>
 
+#include <iostream>
+
 #include <types.h>
 #include <connectx.h>
 #include <mcgs_search.h>
-
-#include <iostream>
 
 namespace s = std;
 namespace r = rlbg;

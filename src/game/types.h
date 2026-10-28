@@ -2,6 +2,7 @@
 #define RLBG_TYPES
 
 #include <cassert>
+
 #include <array>
 #include <functional>
 #include <ostream>
@@ -20,7 +21,7 @@ struct Dr {
 };
 
 bool operator==(Dr a, Dr b){
-  return a.r == b.r && a.c == b.c;
+  return a.r == b.r and a.c == b.c;
 }
 
 bool operator!=(Dr a, Dr b){
@@ -50,7 +51,7 @@ using Neighbours4 = s::array<Pt, 4>;
 using Neighbours8 = s::array<Pt, 8>;
 
 bool operator==(Pt a, Pt b){
-  return a.r == b.r && a.c == b.c;
+  return a.r == b.r and a.c == b.c;
 }
 
 bool operator!=(Pt a, Pt b){
@@ -152,12 +153,10 @@ struct Move {
 bool operator==(const Move& a, const Move& b){
   switch (a.mty){
   case M::Play:
-    return a.mty == b.mty && a.mpt == b.mpt;
-  case M::Pass:
-  case M::Resign:
-  case M::Unknown:
+    return a.mty == b.mty and a.mpt == b.mpt;
+  break; case M::Pass: case M::Resign: case M::Unknown:
     return a.mty == b.mty;
-  default: assert(false);
+  break; default: assert(false);
   }
 }
 
@@ -167,15 +166,18 @@ bool operator!=(const Move& a, const Move& b){
 
 s::ostream& operator<<(s::ostream& out, const Move& move){
   switch (move.mty){
-  break; case M::Play:   out << move.mpt;
-  break; case M::Pass:   out << "Pass";
-  break; case M::Resign: out << "Resign";
+  case M::Play:
+    out << move.mpt;
+  break; case M::Pass:
+    out << "Pass";
+  break; case M::Resign:
+    out << "Resign";
   break; case M::Unknown: default: assert(false);
   }
   return out;
 }
 
-enum class Player: ubyte {
+enum class Player : ubyte {
   Black   = 0x1,
   White   = 0x2,
   Unknown = 0x3, //can used to represent empty
@@ -187,7 +189,7 @@ enum class Player: ubyte {
 
 s::ostream& operator<<(s::ostream& out, Player player){
   switch (player){
-  break; case Player::Black:
+  case Player::Black:
     out << "Black";
   break; case Player::White:
     out << "White";
@@ -208,14 +210,14 @@ struct PlayerMove {
 };
 
 bool operator==(const PlayerMove& a, const PlayerMove& b){
-  return a.player == b.player && a.move == b.move;
+  return a.player == b.player and a.move == b.move;
 }
 
 bool operator!=(const PlayerMove& a, const PlayerMove& b){
   return not operator==(a, b);
 }
 
-} // rlbg
+}  // namespace rlbg
 
 namespace r = rlbg;
 
@@ -233,6 +235,6 @@ struct hash<r::Move> {
     return hash<r::Pt>()(move.mpt);
   }
 };
-} // std
+}  // namespace std
 
 #endif//RLBG_TYPES

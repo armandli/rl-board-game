@@ -1,15 +1,14 @@
 #include <cassert>
 
-#include <types.h>
-#include <connectx.h>
-
-#include <sstream>
-#include <iostream>
-
-#include <thread>
 #include <chrono>
+#include <iostream>
+#include <sstream>
+#include <thread>
 
 #include <curses.h>
+
+#include <types.h>
+#include <connectx.h>
 
 namespace s = std;
 namespace r = rlbg;
@@ -43,7 +42,7 @@ int main(){
     wmove(win, row_id, 1);
     for (char c : outstream.str()){
       switch (c){
-      break; case '\n':
+      case '\n':
         row_id++;
         wmove(win, row_id, 1);
       break; case '|':; //ignore
@@ -62,5 +61,5 @@ int main(){
     game_state.apply(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, pt)));
   }
 
-  delwin(win); 
+  delwin(win);
 }

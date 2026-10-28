@@ -1,14 +1,13 @@
 #include <cassert>
 
+#include <chrono>
+#include <iostream>
+#include <sstream>
+#include <thread>
+
 #include <types.h>
 #include <connectx.h>
 #include <minimax_search.h>
-
-#include <sstream>
-#include <iostream>
-
-#include <thread>
-#include <chrono>
 
 namespace s = std;
 namespace r = rlbg;

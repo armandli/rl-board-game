@@ -2,18 +2,18 @@
 #define RLBG_CONNECTX
 
 #include <cassert>
-#include <array>
-#include <vector>
-#include <algorithm>
 #include <cstring>
+
+#include <algorithm>
+#include <array>
+#include <iostream>
 #include <ostream>
+#include <vector>
 
 #include <type_alias.h>
 #include <types.h>
 #include <zobrist_hash.h>
 #include <game_base.h>
-
-#include <iostream>
 
 namespace rlbg {
 
@@ -24,10 +24,7 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
   static constexpr uint RZ = R;
   static constexpr uint CZ = C;
   static constexpr uint SZ = R * C;
-private:
-  s::array<Player, SZ> mBoard;
-  s::array<ubyte,  CZ> mTop;
-public:
+
   ConnectXBoard(){
     s::memset(mBoard.data(), (uint)Player::Unknown, sizeof(ubyte) * SZ);
     s::memset(mTop.data(), 0U, sizeof(ubyte) * CZ);
@@ -59,7 +56,7 @@ public:
     else                  return true;
   }
   Player operator[](Pt pt) const {
-    assert(pt.r < RZ && pt.c < CZ);
+    assert(pt.r < RZ and pt.c < CZ);
     return mBoard[index<CZ>(pt)];
   }
   void place(Player player, Pt pt){
@@ -68,7 +65,6 @@ public:
     mBoard[index<CZ>(Pt(topr, pt.c))] = player;
     mTop[pt.c] += 1;
   }
-  // assume only reverting the last step
   void revert(Pt pt){
     assert(pt.c < CZ);
     ubyte topr = mTop[pt.c];
@@ -95,7 +91,7 @@ public:
       out << "|";
       for (int c = 0; c < CZ; ++c)
         switch (mBoard[index<CZ>(Pt(r, c))]){
-        break; case Player::Black:
+        case Player::Black:
           out << bchar;
         break; case Player::White:
           out << wchar;
@@ -107,6 +103,10 @@ public:
     }
     return out;
   }
+
+private:
+  s::array<Player, SZ> mBoard;
+  s::array<ubyte,  CZ> mTop;
 };
 
 template <ubyte R, ubyte C>
@@ -117,136 +117,131 @@ s::ostream& operator<<(s::ostream& out, const ConnectXBoard<R, C>& board){
 //TODO: write unit test
 template <ubyte RZ, ubyte CZ, ubyte X>
 s::pair<bool, Player> compute_termination(const ConnectXBoard<RZ,CZ>& board){
-    // terminal if one player connected X
-    int max_count = 0;
-    Player max_player = Player::Unknown;
-    // NOTE: outter for loops can be parallelized
-    // horizontal scan
-    for (int r = 0; r < RZ; ++r){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int c = 0; c < CZ; ++c)
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(r,c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(r,c)];
-        } else
-          count += 1;
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+  int max_count = 0;
+  Player max_player = Player::Unknown;
+  // NOTE: outter for loops can be parallelized
+  for (int r = 0; r < RZ; ++r){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int c = 0; c < CZ; ++c)
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r,c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(r,c)];
+      } else
+        count += 1;
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
     }
-    // vertical scan
-    for (int c = 0; c < CZ; ++c){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int r = 0; r < RZ; ++r)
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(r,c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(r,c)];
-        } else
-          count += 1;
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+  }
+  for (int c = 0; c < CZ; ++c){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int r = 0; r < RZ; ++r)
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r,c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(r,c)];
+      } else
+        count += 1;
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
     }
-    // buttom up diagonal scan
-    for (int r = RZ-1; r >= 0; --r){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int c = 0; c + r < RZ && c < CZ; ++c){
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(c+r,c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(c+r,c)];
-        } else
-          count += 1;
-      }
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+  }
+  for (int r = RZ-1; r >= 0; --r){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int c = 0; c + r < RZ and c < CZ; ++c){
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(c+r,c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(c+r,c)];
+      } else
+        count += 1;
     }
-    for (int r = 0; r < RZ; ++r){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int c = CZ-1; r-((int)CZ-1-c) >= 0 && c >= 0; --c){
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(r-(CZ-1-c),c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(r-(CZ-1-c),c)];
-        } else 
-          count += 1;
-      }
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
     }
-    // top down diagonal scan
-    for (int r = RZ-1; r >= 0; --r){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int c = 0; r-c >= 0 && c < CZ; ++c){
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(r-c,c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(r-c,c)];
-        } else 
-          count += 1;
-      }
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+  }
+  for (int r = 0; r < RZ; ++r){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int c = CZ-1; r-((int)CZ-1-c) >= 0 and c >= 0; --c){
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r-(CZ-1-c),c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(r-(CZ-1-c),c)];
+      } else
+        count += 1;
     }
-    for (int r = RZ-1; r >= 0; --r){
-      int count = 0;
-      Player prev_piece = Player::Unknown;
-      for (int c = CZ-1; r+((int)CZ-1-c) < RZ && c >= 0; --c){
-        if (prev_piece == Player::Unknown || prev_piece != board[Pt(r+(CZ-1-c),c)]){
-          if (count > max_count){
-            max_count = count;
-            max_player = prev_piece;
-          }
-          count = 1;
-          prev_piece = board[Pt(r+(CZ-1-c),c)];
-        } else
-          count += 1;
-      }
-      if (count > max_count){
-        max_count = count;
-        max_player = prev_piece;
-      }
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
     }
+  }
+  for (int r = RZ-1; r >= 0; --r){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int c = 0; r-c >= 0 and c < CZ; ++c){
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r-c,c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(r-c,c)];
+      } else
+        count += 1;
+    }
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
+    }
+  }
+  for (int r = RZ-1; r >= 0; --r){
+    int count = 0;
+    Player prev_piece = Player::Unknown;
+    for (int c = CZ-1; r+((int)CZ-1-c) < RZ and c >= 0; --c){
+      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r+(CZ-1-c),c)]){
+        if (count > max_count){
+          max_count = count;
+          max_player = prev_piece;
+        }
+        count = 1;
+        prev_piece = board[Pt(r+(CZ-1-c),c)];
+      } else
+        count += 1;
+    }
+    if (count > max_count){
+      max_count = count;
+      max_player = prev_piece;
+    }
+  }
 
-    if (max_count >= X)
-      return s::make_pair(true, max_player);
+  if (max_count >= X)
+    return s::make_pair(true, max_player);
 
-    // terminal if board is completely filled
-    ubyte min_row = *s::min_element(s::begin(board.tops()), s::end(board.tops()));
-    if (min_row == RZ)
-      return s::make_pair(true, Player::Unknown);
-    else
-      return s::make_pair(false, Player::Unknown);
+  // terminal if board is completely filled
+  ubyte min_row = *s::min_element(s::begin(board.tops()), s::end(board.tops()));
+  if (min_row == RZ)
+    return s::make_pair(true, Player::Unknown);
+  else
+    return s::make_pair(false, Player::Unknown);
 }
 
 template <ubyte R, ubyte C, ubyte X>
@@ -254,18 +249,27 @@ struct ConnectXGameState : GameState<ConnectXBoard<R,C>, ConnectXGameState<R,C,X
   static constexpr uint RZ = R;
   static constexpr uint CZ = C;
   static constexpr uint SZ = R * C;
-protected:
-  ConnectXBoard<R, C>   mBoard;
-  Player                mNPlayer;
-  s::vector<PlayerMove> mHistory;
-  bool                  mTerminal;
-  Player                mWinner;
-public:
-  ConnectXGameState(): mBoard(), mNPlayer(Player::Black), mHistory(), mTerminal(false), mWinner(Player::Unknown) {}
-  ConnectXGameState(const ConnectXBoard<R,C>& board, Player nxt_player, const s::vector<PlayerMove>& history): mBoard(board), mNPlayer(nxt_player), mHistory(history), mTerminal(false), mWinner(Player::Unknown) {
+
+  ConnectXGameState()
+  : mBoard(), mNPlayer(Player::Black), mHistory(),
+    mTerminal(false), mWinner(Player::Unknown)
+  {}
+  ConnectXGameState(
+      const ConnectXBoard<R,C>& board,
+      Player nxt_player,
+      const s::vector<PlayerMove>& history)
+  : mBoard(board), mNPlayer(nxt_player), mHistory(history),
+    mTerminal(false), mWinner(Player::Unknown)
+  {
     run_test_termination();
   }
-  ConnectXGameState(const ConnectXGameState& o): mBoard(o.mBoard), mNPlayer(o.mNPlayer), mHistory(o.mHistory), mTerminal(o.mTerminal), mWinner(o.mWinner) {}
+  ConnectXGameState(const ConnectXGameState& o)
+  : mBoard(o.mBoard),
+    mNPlayer(o.mNPlayer),
+    mHistory(o.mHistory),
+    mTerminal(o.mTerminal),
+    mWinner(o.mWinner)
+  {}
   ConnectXGameState& operator=(const ConnectXGameState& o){
     mBoard = o.mBoard;
     mNPlayer = o.mNPlayer;
@@ -274,7 +278,13 @@ public:
     mWinner = o.mWinner;
     return *this;
   }
-  ConnectXGameState(ConnectXGameState&& o): mBoard(s::move(o.mBoard)), mNPlayer(o.mNPlayer), mHistory(s::move(o.mHistory)), mTerminal(o.mTerminal), mWinner(o.mWinner) {}
+  ConnectXGameState(ConnectXGameState&& o)
+  : mBoard(s::move(o.mBoard)),
+    mNPlayer(o.mNPlayer),
+    mHistory(s::move(o.mHistory)),
+    mTerminal(o.mTerminal),
+    mWinner(o.mWinner)
+  {}
   ConnectXGameState& operator=(ConnectXGameState&& o){
     //TODO: correct ?
     mBoard    = s::move(o.mBoard);
@@ -294,12 +304,11 @@ public:
   bool is_valid(PlayerMove pm) const {
     if (is_terminal()) return false;
     switch (pm.move.mty){
-    break; case M::Play:
+    case M::Play:
       return mBoard.is_valid(pm.player, pm.move.mpt);
-    break; case M::Pass:
-           case M::Resign:
-           case M::Unknown:
+    break; case M::Pass: case M::Resign: case M::Unknown:
       return false;
+    break; default: assert(false); // should never get here
     }
     return false;
   }
@@ -355,6 +364,7 @@ public:
   const s::vector<PlayerMove>& history() const {
     return mHistory;
   }
+
 protected:
   // this function need to be efficient
   void run_test_termination(){
@@ -362,9 +372,15 @@ protected:
     mTerminal = is_terminal;
     mWinner = winner;
   }
+
+  ConnectXBoard<R, C>   mBoard;
+  Player                mNPlayer;
+  s::vector<PlayerMove> mHistory;
+  bool                  mTerminal;
+  Player                mWinner;
 };
 
-} // rlbg
+}  // namespace rlbg
 
 namespace r = rlbg;
 
@@ -381,6 +397,6 @@ struct hash<r::ConnectXGameState<R,C,X>> {
     return state.hash();
   }
 };
-} // std
+}  // namespace std
 
 #endif//RLBG_CONNECTX

@@ -1,15 +1,14 @@
 #include <cassert>
 
-#include <types.h>
-#include <othello.h>
-
-#include <sstream>
-#include <iostream>
-
-#include <thread>
 #include <chrono>
+#include <iostream>
+#include <sstream>
+#include <thread>
 
 #include <curses.h>
+
+#include <types.h>
+#include <othello.h>
 
 namespace s = std;
 namespace r = rlbg;
@@ -42,7 +41,7 @@ int main(){
     wmove(win, row_id, 0);
     for (char c : outstream.str()){
       switch (c){
-      break; case '\n':
+      case '\n':
         row_id++;
         wmove(win, row_id, 0);
       break; default:
@@ -57,7 +56,7 @@ int main(){
       rowi -= '0';
       coli -= '0';
     //TODO: can't specify pass!
-    } while (not game_state.is_valid(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, r::Pt(rowi, coli))))); 
+    } while (not game_state.is_valid(r::PlayerMove(game_state.next_player(), r::Move(r::M::Play, r::Pt(rowi, coli)))));
 
     r::Move play(r::M::Play, r::Pt(rowi, coli));
     game_state.apply(r::PlayerMove(game_state.next_player(), play));

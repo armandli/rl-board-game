@@ -1,6 +1,8 @@
 #ifndef RLBG_GAME_BASE
 #define RLBG_GAME_BASE
 
+#include <vector>
+
 #include <type_alias.h>
 #include <types.h>
 
@@ -70,6 +72,6 @@ struct GameState {
   }
 };
 
-} // rlbg
+}  // namespace rlbg
 
 #endif//RLBG_GAME_BASE

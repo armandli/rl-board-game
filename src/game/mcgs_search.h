@@ -1,15 +1,15 @@
 #ifndef RLBG_MCGS_SEARCH
 #define RLBG_MCGS_SEARCH
 
+#include <ctime>
+
+#include <deque>
+#include <iostream>
+#include <random>
+
 #include <type_alias.h>
 #include <types.h>
 #include <game_base.h>
-
-#include <ctime>
-#include <deque>
-#include <random>
-
-#include <iostream>
 
 namespace s = std;
 
@@ -17,21 +17,19 @@ namespace rlbg {
 
 template <typename Board, typename Sub>
 struct Node {
+  Node() = default;
+  explicit Node(GameState<Board,Sub>* st): state(st), u(0.f), q(0.f), n(0) {}
+
   GameState<Board,Sub>*           state;
   umap<Move, s::pair<Node*,uint>> children;
   float                           u;
   s::vector<float>                pa;
   float                           q;
   uint                            n;
-
-  Node() = default;
-  explicit Node(GameState<Board,Sub>* st): state(st), u(0.f), q(0.f), n(0) {}
 };
 
 template <typename Board, typename Sub>
-class NullCollector {
-public:
-  // does nothing
+struct NullCollector {
   void collect(const Node<Board,Sub>&){}
 };
 
@@ -50,7 +48,10 @@ template <typename Board, typename Sub>
 struct MCPlayout {
   uint n;
   explicit MCPlayout(uint n): n(n) {}
-  s::pair<float, s::vector<float>> operator()(GameState<Board,Sub>* state, Player player){
+  s::pair<float, s::vector<float>> operator()(
+      GameState<Board,Sub>* state,
+      Player player)
+  {
     float res = 0.;
     for (uint i = 0; i < n; ++i){
       Sub s(*static_cast<Sub*>(state));
@@ -84,12 +85,12 @@ struct UCTSelector {
   Move operator()(Node<Board,Sub>* node, Player player){
     assert(node != nullptr);
     assert(node->state != nullptr);
-  
+
     s::vector<Move> moves = node->state->legal_moves();
 
     assert(node->pa.size() == moves.size());
     assert(moves.size() > 0);
-  
+
     s::vector<uint> mc;
     s::vector<float> mq;
     for (const Move& move : moves){
@@ -102,18 +103,18 @@ struct UCTSelector {
         mq.push_back(child->q);
       }
     }
-  
+
     uint sum_visit = 0;
     for (uint v : mc){
       sum_visit += v;
     }
 
-    // if current state player not root player, 
+    // if current state player not root player,
     // mq is minimized and need to revert the sign
     float pfactor = 1.f;
     if (player != node->state->next_player())
       pfactor = -1.f;
-  
+
     // selection is always based on maximization because exploration bonus is always in positive
     float bq = -1;
     size_t bidx = 0;
@@ -187,7 +188,13 @@ void mcgs_rollout(
 }
 
 template <typename Board, typename Sub, typename SEL, typename PRED, typename COL>
-Move mcgs_search(GameState<Board,Sub>& root_state, SEL& sel, PRED& pred, COL& collector, uint iterations){
+Move mcgs_search(
+    GameState<Board,Sub>& root_state,
+    SEL& sel,
+    PRED& pred,
+    COL& collector,
+    uint iterations)
+{
   Player player = root_state.next_player();
   umap<size_t, GameState<Board,Sub>*> states;
   s::deque<Node<Board,Sub>> node_storage;
@@ -206,7 +213,6 @@ Move mcgs_search(GameState<Board,Sub>& root_state, SEL& sel, PRED& pred, COL& co
 
   cleanup_state_map(states);
 
-  // select move from root node, always maximizing
   Move move(M::Resign);
   Node<Board,Sub>& root_node = *nodes[root_state.hash()];
   if (root_node.children.size() == 0) return move;
@@ -224,6 +230,6 @@ Move mcgs_search(GameState<Board,Sub>& root_state, SEL& sel, PRED& pred, COL& co
   return move;
 }
 
-} // rlbg
+}  // namespace rlbg
 
 #endif//RLBG_MCGS_SEARCH
