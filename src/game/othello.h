@@ -5,6 +5,7 @@
 #include <array>
 #include <cstring>
 #include <unordered_set>
+#include <vector>
 
 #include <type_alias.h>
 #include <types.h>
@@ -19,9 +20,10 @@ template <ubyte SZ>
 struct OthelloBoard : Board<OthelloBoard<SZ>> {
   static constexpr uint IZ = SZ * SZ;
 protected:
-  s::array<Player, IZ> mBoard;
-  uset<Pt>             mBlackCache;
-  uset<Pt>             mWhiteCache;
+  s::array<Player, IZ>     mBoard;
+  uset<Pt>                 mBlackCache;
+  uset<Pt>                 mWhiteCache;
+  s::vector<s::vector<Pt>> mFlipStack;
 public:
   OthelloBoard(){
     static_assert(SZ % 2 == 0, "Othello Board size must be divisible by 2");
@@ -49,23 +51,26 @@ public:
     mBoard = o.mBoard;
     mBlackCache = o.mBlackCache;
     mWhiteCache = o.mWhiteCache;
+    mFlipStack = o.mFlipStack;
   }
   OthelloBoard& operator=(const OthelloBoard& o){
     mBoard = o.mBoard;
     mBlackCache = o.mBlackCache;
     mWhiteCache = o.mWhiteCache;
+    mFlipStack = o.mFlipStack;
     return *this;
   }
   OthelloBoard(OthelloBoard&& o) noexcept :
     mBoard(s::move(o.mBoard)),
     mBlackCache(s::move(o.mBlackCache)),
-    mWhiteCache(s::move(o.mWhiteCache))
+    mWhiteCache(s::move(o.mWhiteCache)),
+    mFlipStack(s::move(o.mFlipStack))
   {}
   OthelloBoard& operator=(OthelloBoard&& o){
-    //TODO: correct ?
     mBoard = s::move(o.mBoard);
     mBlackCache = s::move(o.mBlackCache);
     mWhiteCache = s::move(o.mWhiteCache);
+    mFlipStack = s::move(o.mFlipStack);
     return *this;
   }
 
@@ -108,10 +113,11 @@ public:
   }
   void place(Player player, Pt pt){
     assert(is_valid(player, pt));
-    // scan 8 directions, and flip opponent pieces if caught in between
     mBoard[index<SZ>(pt)] = player;
+    s::vector<Pt> flipped;
     for (Dr d : EIGHT_WAY)
-      flip_stack(player, pt+d, d);
+      flip_stack_record(player, pt+d, d, flipped);
+    mFlipStack.push_back(s::move(flipped));
     // remove moves in cache no longer valid
     uset<Pt> to_remove;
     for (Pt p : mBlackCache)
@@ -140,11 +146,13 @@ public:
   // assume only reverting the last step
   void revert(Pt pt){
     Player rp = mBoard[index<SZ>(pt)];
-
     mBoard[index<SZ>(pt)] = Player::Unknown;
 
-    for (Dr d : EIGHT_WAY)
-      reverse_flip_stack(rp, pt+d, d);
+    if (not mFlipStack.empty()){
+      for (Pt p : mFlipStack.back())
+        mBoard[index<SZ>(p)] = opponent(rp);
+      mFlipStack.pop_back();
+    }
 
     // remove invalid placement from cache
     uset<Pt> to_remove;
@@ -233,24 +241,19 @@ protected:
     }
     return false;
   }
-  Player flip_stack(Player player, Pt pt, Dr d){
-    if (not is_on_board(pt)) return opponent(player);
-    if (mBoard[index<SZ>(pt)] == Player::Unknown) return opponent(player);
-    if (mBoard[index<SZ>(pt)] == player) return player;
-
-    Player p = flip_stack(player, pt+d, d);
-    mBoard[index<SZ>(pt)] = p;
-    return p;
-  }
-  bool reverse_flip_stack(Player player, Pt pt, Dr d){
-    if (not is_on_board(pt)) return true;
-    if (mBoard[index<SZ>(pt)] == Player::Unknown) return true;
-    if (mBoard[index<SZ>(pt)] == opponent(player)) return true;
-
-    bool is_end = reverse_flip_stack(player, pt+d, d);
-    if (not is_end and mBoard[index<SZ>(pt)] == player)
-      mBoard[index<SZ>(pt)] = opponent(player);
-    return false;
+  void flip_stack_record(Player player, Pt pt, Dr d, s::vector<Pt>& flipped){
+    // count opponent pieces before the anchor; bail if no anchor found
+    uint count = 0;
+    for (Pt p = pt; is_on_board(p); p += d){
+      if (mBoard[index<SZ>(p)] == Player::Unknown) return;
+      if (mBoard[index<SZ>(p)] == player) break;
+      count++;
+    }
+    if (count == 0) return;
+    for (Pt p = pt; count > 0; p += d, --count){
+      mBoard[index<SZ>(p)] = player;
+      flipped.push_back(p);
+    }
   }
 };
 
@@ -390,6 +393,7 @@ public:
     if (mHistory.size() > 0) mNPlayer = opponent(mHistory.back().player);
     else                     mNPlayer = Player::Black;
     mTerminal = check_no_more_moves();
+    if (not mTerminal) mWinner = Player::Unknown;
   }
   bool is_terminal() const {
     return mTerminal;

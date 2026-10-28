@@ -6,6 +6,7 @@
 #include <game_base.h>
 
 #include <ctime>
+#include <deque>
 #include <random>
 
 #include <iostream>
@@ -37,7 +38,7 @@ public:
 template <typename Board, typename Sub>
 void cleanup_state_map(umap<size_t, GameState<Board,Sub>*>& states){
   for (auto [h, st] : states)
-    delete st;
+    delete static_cast<Sub*>(st);
 }
 
 s::default_random_engine& get_default_random_engine(){
@@ -134,7 +135,8 @@ void mcgs_rollout(
     SEL& sel,
     PRED& pred,
     umap<size_t, GameState<Board,Sub>*>& states,
-    umap<size_t, Node<Board,Sub>>& nodes
+    umap<size_t, Node<Board,Sub>*>& nodes,
+    s::deque<Node<Board,Sub>>& node_storage
 ){
   assert(node != nullptr);
   assert(node->state != nullptr);
@@ -153,20 +155,20 @@ void mcgs_rollout(
     if (node->children.find(move) == node->children.end()){
       GameState<Board,Sub>* new_state = new Sub(static_cast<Sub&>(*node->state));
       new_state->apply(PlayerMove(new_state->next_player(), move));
-      if (states.find(new_state->hash()) != states.end()){
-        size_t h = new_state->hash();
-        delete static_cast<Sub*>(new_state); //destructor not virtual
-        node->children[move] = s::make_pair<Node<Board,Sub>*, uint>(&nodes[h], 0U);
+      size_t h = new_state->hash();
+      if (nodes.find(h) != nodes.end()){
+        delete static_cast<Sub*>(new_state);
+        node->children[move] = {nodes[h], 0U};
       } else {
-        size_t h = new_state->hash();
         states[h] = new_state;
-        nodes[h] = Node<Board,Sub>(new_state);
-        node->children[move] = s::make_pair<Node<Board,Sub>*, uint>(&nodes[h], 0U);
+        node_storage.emplace_back(new_state);
+        nodes[h] = &node_storage.back();
+        node->children[move] = {nodes[h], 0U};
       }
     }
     // 1. rollout
     auto& [child, vcount] = node->children[move];
-    mcgs_rollout(child, player, sel, pred, states, nodes);
+    mcgs_rollout(child, player, sel, pred, states, nodes, node_storage);
     vcount++;
   }
 
@@ -188,13 +190,16 @@ template <typename Board, typename Sub, typename SEL, typename PRED, typename CO
 Move mcgs_search(GameState<Board,Sub>& root_state, SEL& sel, PRED& pred, COL& collector, uint iterations){
   Player player = root_state.next_player();
   umap<size_t, GameState<Board,Sub>*> states;
+  s::deque<Node<Board,Sub>> node_storage;
+  umap<size_t, Node<Board,Sub>*> nodes;
+
   states[root_state.hash()] = new Sub(static_cast<Sub&>(root_state));
-  umap<size_t, Node<Board,Sub>> nodes;
-  nodes[root_state.hash()] = Node<Board,Sub>(states[root_state.hash()]);
+  node_storage.emplace_back(states[root_state.hash()]);
+  nodes[root_state.hash()] = &node_storage.back();
 
   for (uint i = 0; i < iterations; ++i){
-    Node<Board,Sub>* node = &nodes[root_state.hash()];
-    mcgs_rollout(node, player, sel, pred, states, nodes);
+    Node<Board,Sub>* node = nodes[root_state.hash()];
+    mcgs_rollout(node, player, sel, pred, states, nodes, node_storage);
   }
 
   //TODO: maybe we should do a whole tree stats update before selecting the move
@@ -203,7 +208,7 @@ Move mcgs_search(GameState<Board,Sub>& root_state, SEL& sel, PRED& pred, COL& co
 
   // select move from root node, always maximizing
   Move move(M::Resign);
-  Node<Board,Sub>& root_node = nodes[root_state.hash()];
+  Node<Board,Sub>& root_node = *nodes[root_state.hash()];
   if (root_node.children.size() == 0) return move;
 
   collector.collect(root_node);
