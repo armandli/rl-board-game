@@ -4,7 +4,7 @@ project(rl-board-game)
 
 list(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(Torch QUIET)
