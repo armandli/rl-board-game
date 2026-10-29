@@ -53,3 +53,20 @@ set_property(TARGET othello_simulator PROPERTY CXX_STANDARD 26)
 
 target_link_libraries(othello_simulator util game
   ftxui::screen ftxui::dom ftxui::component)
+
+# report the available ML backend and device
+if(TARGET rlbg_torch)
+  add_executable(torch_info torch_info.cpp)
+
+  set_property(TARGET torch_info PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(torch_info rlbg_torch)
+endif()
+
+if(TARGET rlbg_mlx)
+  add_executable(mlx_info mlx_info.cpp)
+
+  set_property(TARGET mlx_info PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(mlx_info rlbg_mlx)
+endif()
