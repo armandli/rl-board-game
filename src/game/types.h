@@ -20,11 +20,11 @@ struct Dr {
   constexpr Dr(byte r, byte c) noexcept: r(r), c(c) {}
 };
 
-bool operator==(Dr a, Dr b){
+inline bool operator==(Dr a, Dr b){
   return a.r == b.r and a.c == b.c;
 }
 
-bool operator!=(Dr a, Dr b){
+inline bool operator!=(Dr a, Dr b){
   return not operator==(a, b);
 }
 
@@ -50,15 +50,15 @@ struct Pt {
 using Neighbours4 = s::array<Pt, 4>;
 using Neighbours8 = s::array<Pt, 8>;
 
-bool operator==(Pt a, Pt b){
+inline bool operator==(Pt a, Pt b){
   return a.r == b.r and a.c == b.c;
 }
 
-bool operator!=(Pt a, Pt b){
+inline bool operator!=(Pt a, Pt b){
   return not operator==(a, b);
 }
 
-s::ostream& operator<<(s::ostream& out, const Pt& pt){
+inline s::ostream& operator<<(s::ostream& out, const Pt& pt){
   out << "(" << (int)pt.r << "," << (int)pt.c << ")";
   return out;
 }
@@ -73,15 +73,15 @@ template <uint SZ>
   return Pt(idx / SZ, idx % SZ);
 }
 
-Pt operator+(Pt pt, Dr dr){
+inline Pt operator+(Pt pt, Dr dr){
   return Pt(pt.r+dr.r, pt.c+dr.c);
 }
 
-Pt operator+(Dr dr, Pt pt){
+inline Pt operator+(Dr dr, Pt pt){
   return operator+(pt, dr);
 }
 
-Pt operator-(Pt pt, Dr dr){
+inline Pt operator-(Pt pt, Dr dr){
   return Pt(pt.r-dr.r, pt.c-dr.c);
 }
 
@@ -96,7 +96,7 @@ constexpr s::array<Dr, 8> EIGHT_WAY {
   Dr( 1,-1),
 };
 
-[[gnu::always_inline]] Neighbours4 neighbours(Pt p){
+[[gnu::always_inline]] inline Neighbours4 neighbours(Pt p){
   return Neighbours4{
     Pt(p.r-1, p.c),
     Pt(p.r,   p.c-1),
@@ -105,7 +105,7 @@ constexpr s::array<Dr, 8> EIGHT_WAY {
   };
 }
 
-[[gnu::always_inline]] Neighbours4 corners(Pt p){
+[[gnu::always_inline]] inline Neighbours4 corners(Pt p){
   return Neighbours4{
     Pt(p.r-1, p.c-1),
     Pt(p.r+1, p.c-1),
@@ -114,7 +114,7 @@ constexpr s::array<Dr, 8> EIGHT_WAY {
   };
 }
 
-[[gnu::always_inline]] Neighbours8 surroundings(Pt p){
+[[gnu::always_inline]] inline Neighbours8 surroundings(Pt p){
   return Neighbours8{
     Pt(p.r-1, p.c),
     Pt(p.r-1, p.c+1),
@@ -150,7 +150,7 @@ struct Move {
   }
 };
 
-bool operator==(const Move& a, const Move& b){
+inline bool operator==(const Move& a, const Move& b){
   switch (a.mty){
   case M::Play:
     return a.mty == b.mty and a.mpt == b.mpt;
@@ -160,11 +160,11 @@ bool operator==(const Move& a, const Move& b){
   }
 }
 
-bool operator!=(const Move& a, const Move& b){
+inline bool operator!=(const Move& a, const Move& b){
   return not operator==(a, b);
 }
 
-s::ostream& operator<<(s::ostream& out, const Move& move){
+inline s::ostream& operator<<(s::ostream& out, const Move& move){
   switch (move.mty){
   case M::Play:
     out << move.mpt;
@@ -183,11 +183,11 @@ enum class Player : ubyte {
   Unknown = 0x3, //can used to represent empty
 };
 
-[[gnu::always_inline]] Player opponent(Player player){
+[[gnu::always_inline]] inline Player opponent(Player player){
   return (Player)((ubyte)player ^ 0x3U);
 }
 
-s::ostream& operator<<(s::ostream& out, Player player){
+inline s::ostream& operator<<(s::ostream& out, Player player){
   switch (player){
   case Player::Black:
     out << "Black";
@@ -209,11 +209,11 @@ struct PlayerMove {
   PlayerMove(const PlayerMove& o): player(o.player), move(o.move) {}
 };
 
-bool operator==(const PlayerMove& a, const PlayerMove& b){
+inline bool operator==(const PlayerMove& a, const PlayerMove& b){
   return a.player == b.player and a.move == b.move;
 }
 
-bool operator!=(const PlayerMove& a, const PlayerMove& b){
+inline bool operator!=(const PlayerMove& a, const PlayerMove& b){
   return not operator==(a, b);
 }
 

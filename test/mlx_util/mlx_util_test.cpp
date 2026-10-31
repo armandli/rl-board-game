@@ -1,10 +1,10 @@
 #include <cmath>
-#include <cstdlib>
 
 #include <exception>
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <source_location>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -12,6 +12,8 @@
 #include <mlx/mlx.h>
 
 #include <mlx_util/nn.h>
+
+#include <gtest/gtest.h>
 
 #include "zoo.h"
 
@@ -26,23 +28,19 @@ using nn::Params;
 
 namespace {
 
-int failures = 0;
-
-void check(bool ok, const s::string& what) {
-  if (not ok) {
-    ++failures;
-    s::cout << "FAIL: " << what << s::endl;
-  }
+// a failed check reports the caller's line, with what as the message
+void check(bool ok, const s::string& what, s::source_location loc = s::source_location::current()) {
+  if (not ok) ADD_FAILURE_AT(loc.file_name(), loc.line()) << what;
 }
 
 template <typename F>
-void check_throws(F f, const s::string& what) {
+void check_throws(F f, const s::string& what, s::source_location loc = s::source_location::current()) {
   try {
     f();
   } catch (const s::exception&) {
     return;
   }
-  check(false, what + " should throw");
+  ADD_FAILURE_AT(loc.file_name(), loc.line()) << what << " should throw";
 }
 
 bool same(const mx::array& a, const mx::array& b) {
@@ -65,7 +63,9 @@ s::string tmp_dir() {
   return p.string();
 }
 
-void test_module_tree() {
+} // namespace
+
+TEST(Module, Tree) {
   auto mlp = s::make_shared<nn::Sequential>(
     s::make_shared<nn::Linear>(8, 16),
     nn::relu,
@@ -141,7 +141,7 @@ void test_module_tree() {
   check_throws([&] { dict->at<nn::Conv1d>("policy"); }, "ModuleDict::at with wrong type");
 }
 
-void test_io() {
+TEST(Io, RoundTrips) {
   s::string dir = tmp_dir();
   Params arrays{
     {"a.weight", mx::random::normal({3, 4})},
@@ -167,7 +167,7 @@ void test_io() {
   check_throws([&] { nn::save_arrays(dir + "/a.bin", arrays); }, "unsupported extension");
 }
 
-void test_value_and_grad() {
+TEST(ValueAndGrad, TrainsAndRestores) {
   mx::random::seed(3);
   auto model = s::make_shared<nn::Linear>(3, 1);
   mx::array x = mx::random::normal({64, 3});
@@ -198,7 +198,7 @@ void test_value_and_grad() {
   check(keys_of(grads) == s::vector<s::string>{"weight"}, "frozen parameters get no gradient");
 }
 
-void test_checkpoint() {
+TEST(Checkpoint, MatchesPlainGradients) {
   mx::random::seed(4);
   auto plain = s::make_shared<nn::TransformerEncoder>(2, 8, 2, 16);
   auto ckpt = s::make_shared<nn::TransformerEncoder>(2, 8, 2, 16, 0.0, nullptr, true, true);
@@ -212,7 +212,7 @@ void test_checkpoint() {
     check(g2.contains(k) and close(v, g2.at(k), 1e-4), "checkpointed gradient matches " + k);
 }
 
-void test_optimizer_state() {
+TEST(Optimizer, StateResumes) {
   s::string dir = tmp_dir();
   mx::random::seed(5);
   auto model = rt::build_train_model();
@@ -243,7 +243,7 @@ void test_optimizer_state() {
         "MultiOptimizer state keys");
 }
 
-void test_layers_misc() {
+TEST(Layers, Misc) {
   mx::random::seed(6);
   auto mlp = s::make_shared<nn::Sequential>(
     s::make_shared<nn::Linear>(4, 8), s::make_shared<nn::LayerNorm>(8),
@@ -281,99 +281,26 @@ void test_layers_misc() {
   check(nn::MaxPool2d(2)(mx::ones({1, 5, 5, 1})).shape() == mx::Shape{1, 2, 2, 1}, "strided pooling");
 }
 
-int run_unit() {
-  test_module_tree();
-  test_io();
-  test_value_and_grad();
-  test_checkpoint();
-  test_optimizer_state();
-  test_layers_misc();
-  s::cout << (failures ? "unit tests FAILED: " + s::to_string(failures) : s::string("unit tests passed"))
-          << s::endl;
-  return failures ? 1 : 0;
-}
+TEST(Blocks, TransformerBlockAndScaleGradient) {
+  mx::random::seed(7);
+  check(nn::swiglu_hidden_dims(128) == 352, "swiglu hidden dims round to 32");
+  auto block = s::make_shared<nn::TransformerBlock>(32, 4);
+  std::vector<std::string> keys = keys_of(block->parameters());
+  check(keys == std::vector<std::string>{
+    "attention.key_proj.weight", "attention.out_proj.weight", "attention.query_proj.weight",
+    "attention.value_proj.weight", "attention_norm.weight", "mlp.w1.weight", "mlp.w2.weight",
+    "mlp.w3.weight", "mlp_norm.weight"}, "transformer block parameter keys");
+  mx::array x = mx::random::normal({2, 5, 32});
+  mx::array y = (*block)(x);
+  check(y.shape() == x.shape(), "transformer block keeps shape");
+  // attention mixes tokens: changing one token changes the others' outputs
+  mx::array x2 = mx::concatenate({mx::zeros({2, 1, 32}), mx::slice(x, {0, 1, 0}, {2, 5, 32})}, 1);
+  mx::array y2 = (*block)(x2);
+  check(not close(mx::slice(y, {0, 1, 0}, {2, 5, 32}), mx::slice(y2, {0, 1, 0}, {2, 5, 32})), "transformer block attends");
 
-void save_weights(nn::Module& m, const s::string& file_base, const s::string& format) {
-  if (format == ".npz.compressed") nn::save_npz(file_base + ".npz", m.parameters(), true);
-  else m.save_weights(file_base + format);
-}
-
-s::string weights_file(const s::string& base, const s::string& format) {
-  return base + (format == ".npz.compressed" ? s::string(".npz") : format);
-}
-
-// loads Python's zoo weights and writes this side's outputs
-int run_forward(const s::string& dir) {
-  Params inputs = nn::load_arrays(dir + "/inputs.npz");
-  Params out;
-  for (const rt::ZooEntry& e : rt::zoo()) {
-    auto m = e.build();
-    m->load_weights(weights_file(dir + "/py_" + e.name, e.py_format));
-    for (auto& [k, v] : e.run(*m, inputs)) out.insert_or_assign(k, v);
-  }
-  for (auto& [k, v] : rt::functions_outputs(inputs)) out.insert_or_assign(k, v);
-  nn::save_npz(dir + "/cpp_forward.npz", out);
-  return 0;
-}
-
-// C++ initialized zoo for Python to load
-int run_export(const s::string& dir) {
-  Params inputs = nn::load_arrays(dir + "/inputs.npz");
-  Params out;
-  mx::random::seed(11);
-  for (const rt::ZooEntry& e : rt::zoo()) {
-    auto m = e.build();
-    if (e.warmup) e.warmup(*m, inputs);
-    save_weights(*m, dir + "/cpp_" + e.name, e.cpp_format);
-    for (auto& [k, v] : e.run(*m, inputs)) out.insert_or_assign(k, v);
-  }
-  nn::save_arrays(dir + "/cpp_export.safetensors", out);
-  return 0;
-}
-
-int run_train(const s::string& dir) {
-  Params inputs = nn::load_arrays(dir + "/inputs.npz");
-  for (const rt::OptEntry& entry : rt::optimizers()) {
-    auto m = rt::build_train_model();
-    m->load_weights(dir + "/train_w0.safetensors");
-    auto opt = entry.build();
-    for (int i = 0; i < 3; ++i) rt::train_step(*m, *opt, entry, inputs);
-    m->save_weights(dir + "/cpp_" + entry.name + "_w3.npz");
-    opt->save_state(dir + "/cpp_" + entry.name + "_s3.safetensors");
-    rt::train_step(*m, *opt, entry, inputs);
-    m->save_weights(dir + "/cpp_" + entry.name + "_w4.npz");
-  }
-  return 0;
-}
-
-int run_resume(const s::string& dir) {
-  Params inputs = nn::load_arrays(dir + "/inputs.npz");
-  for (const rt::OptEntry& entry : rt::optimizers()) {
-    auto m = rt::build_train_model();
-    m->load_weights(dir + "/py_" + entry.name + "_w3.npz");
-    auto opt = entry.build();
-    opt->load_state(dir + "/py_" + entry.name + "_s3.safetensors");
-    rt::train_step(*m, *opt, entry, inputs);
-    m->save_weights(dir + "/cpp_" + entry.name + "_resume_w4.safetensors");
-  }
-  return 0;
-}
-
-} // namespace
-
-int main(int argc, char** argv) {
-  s::string mode = argc > 1 ? argv[1] : "unit";
-  s::string dir = argc > 2 ? argv[2] : "";
-  try {
-    if (mode == "unit") return run_unit();
-    if (mode == "forward") return run_forward(dir);
-    if (mode == "export") return run_export(dir);
-    if (mode == "train") return run_train(dir);
-    if (mode == "resume") return run_resume(dir);
-  } catch (const s::exception& e) {
-    s::cerr << "error: " << e.what() << s::endl;
-    return 2;
-  }
-  s::cerr << "usage: mlx_util_test [unit | forward DIR | export DIR | train DIR | resume DIR]" << s::endl;
-  return 2;
+  mx::array a = mx::array({1.f, 2.f, 3.f});
+  auto f = [](const mx::array& v) { return mx::sum(nn::scale_gradient(v, 0.25) * v); };
+  mx::array g = mx::grad(f)(a);
+  check(close(f(a), mx::array(14.f)), "scale_gradient is identity forward");
+  check(close(g, a * mx::array(1.25f)), "scale_gradient scales the gradient");
 }

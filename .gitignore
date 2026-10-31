@@ -32,3 +32,6 @@
 *.app
 
 build/
+
+# training experience, checkpoints, snapshots and logs
+data/

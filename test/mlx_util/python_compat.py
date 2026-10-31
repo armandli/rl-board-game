@@ -1,9 +1,9 @@
 """Checks that rlbg mlx_util (C++) and Python MLX read each other's files and
 compute the same results.
 
-usage: python python_compat.py path/to/mlx_util_test [work_dir]
+usage: python python_compat.py path/to/mlx_util_compat [work_dir]
 
-Mirrors src/mlx_util/test/zoo.cpp; keep the two in sync. Flows:
+Mirrors test/mlx_util/zoo.cpp; keep the two in sync. Flows:
   forward  Python weights -> C++ load_weights -> same outputs
   export   C++ weights -> Python load_weights -> same outputs
   train    same optimizer steps from the same weights in both languages, and

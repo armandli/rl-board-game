@@ -5,6 +5,7 @@ endif()
 
 add_library(mlx_util STATIC
   activations.cpp
+  blocks.cpp
   containers.cpp
   convolution.cpp
   dropout.cpp
@@ -39,5 +40,3 @@ if(ZLIB_FOUND)
 else()
   message(STATUS "mlx_util: zlib not found, compressed .npz unsupported")
 endif()
-
-add_subdirectory(test)

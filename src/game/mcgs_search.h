@@ -39,7 +39,7 @@ void cleanup_state_map(umap<size_t, GameState<Board,Sub>*>& states){
     delete static_cast<Sub*>(st);
 }
 
-s::default_random_engine& get_default_random_engine(){
+inline s::default_random_engine& get_default_random_engine(){
   static s::default_random_engine engine(time(0));
   return engine;
 }

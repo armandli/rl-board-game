@@ -2,12 +2,13 @@
 #define RLBG_MLX_UTIL_NN_H
 
 // C++ counterpart of Python's mlx.nn and mlx.optimizers:
-//   rlbg::nn         Module, layers, activations, losses, value_and_grad,
+//   rlbg::nn         Module, layers, transformer blocks, activations, losses, value_and_grad,
 //                    checkpoint, weight file io
 //   rlbg::nn::init   initializers
 //   rlbg::optim      optimizers, schedulers, clip_grad_norm
 
 #include <mlx_util/activations.h>
+#include <mlx_util/blocks.h>
 #include <mlx_util/containers.h>
 #include <mlx_util/convolution.h>
 #include <mlx_util/dropout.h>

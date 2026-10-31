@@ -8,7 +8,7 @@
 
 namespace rlbg {
 
-uint zobrist_hash(uint player, uint p_index){
+inline uint zobrist_hash(uint player, uint p_index){
   uint key = p_index;
   key |= player << 30U;
   switch (key){
@@ -271,7 +271,7 @@ uint zobrist_hash(uint player, uint p_index){
     default: assert(false);
   }
 }
-uint zobrist_hash(uint player){
+inline uint zobrist_hash(uint player){
   uint key = player << 30U;
   switch (key){
     case 0x40000000U: return 0x33bb8f42U; break;

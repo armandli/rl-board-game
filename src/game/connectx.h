@@ -38,7 +38,7 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
     mTop = o.mTop;
     return *this;
   }
-  ConnectXBoard(ConnectXBoard&& o) noexcept : mBoard(s::move(o.mBoard)) {}
+  ConnectXBoard(ConnectXBoard&& o) noexcept : mBoard(s::move(o.mBoard)), mTop(s::move(o.mTop)) {}
   ConnectXBoard& operator=(ConnectXBoard&& o){
     //TODO: correct ?
     mBoard = s::move(o.mBoard);
@@ -330,7 +330,9 @@ struct ConnectXGameState : GameState<ConnectXBoard<R,C>, ConnectXGameState<R,C,X
     return true;
   }
   void rollback(int steps){
-    for (size_t i = 0; i < s::min((size_t)steps, mHistory.size()); ++i){
+    // the bound is fixed up front: the loop shrinks the history
+    size_t n = s::min((size_t)steps, mHistory.size());
+    for (size_t i = 0; i < n; ++i){
       PlayerMove pm = mHistory.back();
       mHistory.pop_back();
       if (pm.move.mty != M::Play) continue;

@@ -15,7 +15,7 @@ ifeq ($(origin CC),default)
   CC := $(if $(findstring clang++,$(CXX)),$(subst clang++,clang,$(CXX)),$(subst g++,gcc,$(CXX)))
 endif
 
-.PHONY: all configure rebuild clean
+.PHONY: all configure rebuild clean test
 
 all: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --parallel
@@ -26,6 +26,9 @@ configure $(BUILD_DIR)/CMakeCache.txt:
 	  -DCMAKE_INSTALL_PREFIX=install \
 	  -DCMAKE_CXX_COMPILER=$(CXX) \
 	  -DCMAKE_C_COMPILER=$(CC)
+
+test: all
+	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
 rebuild: clean
 	$(MAKE) all

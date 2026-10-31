@@ -46,7 +46,7 @@ void generate_board_hash_table(
 {
   s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
 
-  out << "uint zobrist_hash(uint player, uint p_index){\n";
+  out << "inline uint zobrist_hash(uint player, uint p_index){\n";
   out << "  uint key = p_index;\n";
   out << "  key |= player << 30U;\n";
   out << "  switch (key){\n";
@@ -74,7 +74,7 @@ void generate_player_hash_table(
 {
   s::uniform_int_distribution<uint> dist(0x10000000U, 0xFFFFFFFFU);
 
-  out << "uint zobrist_hash(uint player){\n";
+  out << "inline uint zobrist_hash(uint player){\n";
   out << "  uint key = player << 30U;\n";
   out << "  switch (key){\n";
 

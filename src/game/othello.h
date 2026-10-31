@@ -234,12 +234,16 @@ protected:
   void flip_stack_record(Player player, Pt pt, Dr d, s::vector<Pt>& flipped){
     // count opponent pieces before the anchor; bail if no anchor found
     uint count = 0;
+    bool anchored = false;
     for (Pt p = pt; is_on_board(p); p += d){
       if (mBoard[index<SZ>(p)] == Player::Unknown) return;
-      if (mBoard[index<SZ>(p)] == player) break;
+      if (mBoard[index<SZ>(p)] == player){
+        anchored = true;
+        break;
+      }
       count++;
     }
-    if (count == 0) return;
+    if (not anchored or count == 0) return;
     for (Pt p = pt; count > 0; p += d, --count){
       mBoard[index<SZ>(p)] = player;
       flipped.push_back(p);
@@ -391,7 +395,9 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
     }
   }
   void rollback(size_t steps){
-    for (size_t i = 0; i < s::min((size_t)steps, mHistory.size()); ++i){
+    // the bound is fixed up front: the loop shrinks the history
+    size_t n = s::min((size_t)steps, mHistory.size());
+    for (size_t i = 0; i < n; ++i){
       PlayerMove pm = mHistory.back();
       mHistory.pop_back();
       //TODO: revert resign ?

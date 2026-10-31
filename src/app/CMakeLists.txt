@@ -70,3 +70,12 @@ if(TARGET rlbg_mlx)
 
   target_link_libraries(mlx_info rlbg_mlx)
 endif()
+
+# MuZero self-play training for othello
+if(TARGET training)
+  add_executable(othello_mcgs_selfplay_train othello_mcgs_selfplay_train.cpp)
+
+  set_property(TARGET othello_mcgs_selfplay_train PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(othello_mcgs_selfplay_train training CLI11::CLI11)
+endif()

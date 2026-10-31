@@ -79,6 +79,13 @@ mx.save_safetensors("optimizer.safetensors", dict(tree_flatten(optimizer.state))
 `.npz` (also compressed, when built with zlib) and `.safetensors` work both
 ways; `.gguf` can be loaded.
 
+## Beyond mlx.nn
+
+`blocks.h` adds layers modern transformers use that mlx.nn does not ship:
+`SwiGLU` (gated MLP), `TransformerBlock` (pre-RMSNorm attention + SwiGLU,
+attention through `mx::fast::scaled_dot_product_attention`) and
+`scale_gradient` (identity forward, scaled gradient backward, as in MuZero).
+
 ## Differences from Python
 
 - Not ported: quantized layers (`QuantizedLinear`, ...) and distributed layers
@@ -94,11 +101,12 @@ ways; `.gguf` can be loaded.
 ## Tests
 
 ```sh
-build/bin/mlx_util_test unit
-~/.local/mlx/bin/python src/mlx_util/test/python_compat.py build/bin/mlx_util_test
+make test                                   # every suite, mlx_util_test among them
+build/bin/mlx_util_test
+python3 test/mlx_util/python_compat.py build/bin/mlx_util_compat
 ```
 
-`python_compat.py` mirrors `test/zoo.cpp`. It loads Python weights in C++ and
+The tests live in `test/mlx_util/`. `python_compat.py` mirrors `zoo.cpp`. It loads Python weights in C++ and
 C++ weights in Python and compares the outputs. It also runs every optimizer
 for the same steps in both languages and resumes training in each language
 from the other's saved optimizer state.
