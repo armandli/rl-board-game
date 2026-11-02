@@ -110,6 +110,10 @@ int main(int argc, char** argv){
   learn->add_option("--min-replay", cfg.min_replay_positions, "Positions before training starts")->capture_default_str();
   learn->add_option("--sample-reuse", cfg.sample_reuse, "Training samples per self-play position")->capture_default_str();
   learn->add_option("--selfplay-lead", cfg.selfplay_lead, "Positions self-play may run ahead of the learner")->capture_default_str();
+  learn->add_option("--value-horizon", cfg.value.horizon, "Moves before a value target bootstraps from a search value, 0 for the final result only")->capture_default_str();
+  learn->add_option("--value-min-horizon", cfg.value.min_horizon, "Shortest bootstrap horizon, for the oldest games")->capture_default_str();
+  learn->add_option("--value-horizon-decay", cfg.value.horizon_decay_steps, "Learner steps of game age per move the horizon shrinks")->capture_default_str();
+  learn->add_option("--value-max-age", cfg.value.max_value_age, "Oldest search value, in learner steps, a target may bootstrap from")->capture_default_str();
   learn->add_option("--compute-dtype", cfg.learner.compute_dtype, "Training precision: bfloat16, float16 or float32")
     ->check(CLI::IsMember({"bfloat16", "float16", "float32"}))->capture_default_str();
   learn->add_option("--optimizer", cfg.learner.optimizer, "muon or adamw")->check(CLI::IsMember({"muon", "adamw"}))->capture_default_str();

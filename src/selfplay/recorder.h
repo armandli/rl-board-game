@@ -34,6 +34,7 @@ struct TrajectoryRecorder {
     t.policies.insert(t.policies.end(), result.policy.begin(), result.policy.end());
     t.policy_valid.push_back(policy_valid ? 1 : 0);
     t.root_values.push_back(result.root_value);
+    t.value_versions.push_back(result.simulations > 0 ? t.model_version : Trajectory::NO_VALUE);
     int mover = game.to_play();
     game.apply(result.action);
     t.rewards.push_back((int8_t)(game.is_terminal() ? game.outcome(mover) : 0));

@@ -44,6 +44,7 @@ inline s::shared_ptr<Trajectory> random_trajectory(
     for (int a : legal) t->policies[p + a] = 1.f / legal.size;
     t->policy_valid.push_back(u(rng) < policy_valid_prob ? 1 : 0);
     t->root_values.push_back(0.f);
+    t->value_versions.push_back(Trajectory::NO_VALUE);
     int a = legal[s::uniform_int_distribution<int>(0, legal.size - 1)(rng)];
     t->actions.push_back((int16_t)a);
     int mover = g.to_play();

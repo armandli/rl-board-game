@@ -45,7 +45,9 @@ TEST(BatchBuilder, IdentitySampleCopiesTheTrajectory){
     EXPECT_EQ(b.state_mask[k], 1.f);
     EXPECT_EQ(b.value_mask[k], 1.f);
     EXPECT_EQ(b.policy_mask[k], 1.f);
-    EXPECT_EQ(b.values[k], t->value_target(j) + 1);
+    // without a bootstrap horizon the value target is the final result, one hot
+    for (int c = 0; c < 3; ++c)
+      EXPECT_EQ(b.values[k * 3 + c], c == t->value_target(j) + 1 ? 1.f : 0.f);
     for (int a = 0; a < 65; ++a) EXPECT_EQ(b.policies[k * 65 + a], t->policies[j * 65 + a]);
     for (int i = 0; i < 64; ++i){
       EXPECT_EQ(b.tokens[k * 64 + i], t->token_classes(j)[i]);
@@ -140,4 +142,86 @@ TEST(BatchBuilder, BuildsFromReplay){
       if (k < K) EXPECT_EQ(b.reward_mask[s * K + k], b.state_mask[i + 1]);
     }
   }
+}
+
+namespace {
+
+// a trajectory whose root values are all searched by network version 1000
+std::shared_ptr<r::Trajectory> searched_trajectory(r::OthelloEncoder& enc, std::mt19937_64& rng){
+  auto t = rt::random_trajectory(enc, rng);
+  t->model_version = 1000;
+  for (int i = 0; i < t->length; ++i){
+    t->root_values[i] = 0.01f * (i + 1);
+    t->value_versions[i] = 1000;
+  }
+  return t;
+}
+
+// expected bootstrap of state j from the root value of state i
+float boot(const r::Trajectory& t, int j, int i){
+  return t.to_play[i] == t.to_play[j] ? t.root_values[i] : -t.root_values[i];
+}
+
+float expectation(const r::TrainingBatch& b, int k){
+  return b.values[k * 3 + 2] - b.values[k * 3];
+}
+
+r::ValueTargetConfig value_config(){
+  return r::ValueTargetConfig{.horizon = 10, .min_horizon = 2, .horizon_decay_steps = 100, .max_value_age = 500};
+}
+
+} // namespace
+
+TEST(BatchBuilder, FreshGamesBootstrapAfterTheFullHorizon){
+  r::OthelloEncoder enc;
+  std::mt19937_64 rng(5);
+  r::BatchBuilder<Game> builder(&enc, 1, K, false, value_config());
+  r::TrainingBatch b;
+  b.resize(1, K, 64, 4, 65);
+  auto t = searched_trajectory(enc, rng);
+  ASSERT_GT(t->length, 20);
+  builder.fill(*t, 0, 0, 0, b, 1000);
+  for (int k = 0; k <= K; ++k){
+    EXPECT_NEAR(expectation(b, k), boot(*t, k, k + 10), 1e-6) << k;
+    // two hot on {-1, 0, +1}
+    EXPECT_NEAR(b.values[k * 3] + b.values[k * 3 + 1] + b.values[k * 3 + 2], 1.f, 1e-6);
+    EXPECT_TRUE(b.values[k * 3] == 0.f or b.values[k * 3 + 2] == 0.f);
+  }
+}
+
+TEST(BatchBuilder, OlderGamesBootstrapSooner){
+  r::OthelloEncoder enc;
+  std::mt19937_64 rng(6);
+  r::BatchBuilder<Game> builder(&enc, 1, K, false, value_config());
+  r::TrainingBatch b;
+  b.resize(1, K, 64, 4, 65);
+  auto t = searched_trajectory(enc, rng);
+  // the game is 450 steps old: horizon 10 - 4 = 6; values 450 old are fresh
+  builder.fill(*t, 0, 0, 0, b, 1450);
+  EXPECT_NEAR(expectation(b, 0), boot(*t, 0, 6), 1e-6);
+  // 2000 steps old: the horizon bottoms out at 2, but the values are stale
+  builder.fill(*t, 0, 0, 0, b, 3000);
+  EXPECT_NEAR(expectation(b, 0), (float)t->value_target(0), 1e-6) << "stale values fall back to the result";
+  // a reanalyzed value further on is still used
+  t->value_versions[5] = 2900;
+  builder.fill(*t, 0, 0, 0, b, 3000);
+  EXPECT_NEAR(expectation(b, 0), boot(*t, 0, 5), 1e-6);
+}
+
+TEST(BatchBuilder, BootstrapNeedsASearchedValueBeforeTheEnd){
+  r::OthelloEncoder enc;
+  std::mt19937_64 rng(7);
+  r::BatchBuilder<Game> builder(&enc, 1, K, false, value_config());
+  r::TrainingBatch b;
+  b.resize(1, K, 64, 4, 65);
+  auto t = searched_trajectory(enc, rng);
+  int L = t->length;
+  // the horizon reaches past the end of the game: the final result
+  builder.fill(*t, L - 3, 0, 0, b, 1000);
+  for (int k = 0; k < 3; ++k)
+    EXPECT_NEAR(expectation(b, k), (float)t->value_target(L - 3 + k), 1e-6) << k;
+  // unsearched (forced) moves are skipped
+  t->value_versions[10] = r::Trajectory::NO_VALUE;
+  builder.fill(*t, 0, 0, 0, b, 1000);
+  EXPECT_NEAR(expectation(b, 0), boot(*t, 0, 11), 1e-6);
 }

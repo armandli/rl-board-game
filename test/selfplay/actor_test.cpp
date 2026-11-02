@@ -113,7 +113,7 @@ TEST(SelfPlayActor, PausesWhenAsked){
   EXPECT_GT(stats.moves.load(), 0u);
 }
 
-TEST(ReanalyzeActor, RefreshesPolicyTargets){
+TEST(ReanalyzeActor, RefreshesPolicyTargetsAndValues){
   r::OthelloEncoder enc;
   rt::OthelloTrueModel model;
   r::FifoReplayBuffer replay(100000);
@@ -125,7 +125,8 @@ TEST(ReanalyzeActor, RefreshesPolicyTargets){
   }
   r::SelfPlayStats stats;
   std::atomic<bool> stop{false};
-  r::ReanalyzeActor<Game> actor(small_selfplay(), &model, factory(enc, model.latent_size()), &replay, &stats, 4);
+  r::ReanalyzeActor<Game> actor(small_selfplay(), &model, factory(enc, model.latent_size()), &replay, &stats,
+                                []{ return 9u; }, 4);
   run_until([&]{ actor.run(stop); }, [&]{ return stats.reanalyzed.load() >= 40; }, stop);
 
   ASSERT_GE(stats.reanalyzed.load(), 40u);
@@ -136,6 +137,16 @@ TEST(ReanalyzeActor, RefreshesPolicyTargets){
       if (not t->policy_valid[s]) continue;
       ++refreshed;
       Game g = rt::replay_to(*t, s);
+      // a searched position also gets a root value tagged with the
+      // reanalyzing network's version; a forced move is not searched
+      r::ActionList<Game::NUM_ACTIONS> legal;
+      g.legal_actions(legal);
+      if (legal.size > 1){
+        EXPECT_EQ(t->value_versions[s], 9u);
+        EXPECT_LE(std::abs(t->root_values[s]), 1.f);
+      } else {
+        EXPECT_EQ(t->value_versions[s], r::Trajectory::NO_VALUE);
+      }
       double sum = 0.;
       for (int a = 0; a < 65; ++a){
         float p = t->policies[s * 65 + a];
@@ -154,7 +165,8 @@ TEST(ReanalyzeActor, WaitsForAnEmptyBuffer){
   r::FifoReplayBuffer replay(1000);
   r::SelfPlayStats stats;
   std::atomic<bool> stop{false};
-  r::ReanalyzeActor<Game> actor(small_selfplay(), &model, factory(enc, model.latent_size()), &replay, &stats, 5);
+  r::ReanalyzeActor<Game> actor(small_selfplay(), &model, factory(enc, model.latent_size()), &replay, &stats,
+                                []{ return 0u; }, 5);
   std::thread t([&]{ actor.run(stop); });
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   stop = true;

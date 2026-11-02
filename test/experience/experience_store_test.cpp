@@ -25,6 +25,10 @@ std::vector<std::shared_ptr<r::Trajectory>> games(int n, uint64_t seed){
   for (int i = 0; i < n; ++i){
     out.push_back(rt::random_trajectory(enc, rng, 0.5));
     out.back()->model_version = 100 + i;
+    for (size_t s = 0; s < out.back()->value_versions.size(); s += 2){
+      out.back()->value_versions[s] = 100 + i;
+      out.back()->root_values[s] = 0.25f;
+    }
   }
   return out;
 }
@@ -40,6 +44,7 @@ void expect_same(const r::Trajectory& a, const r::Trajectory& b){
   EXPECT_EQ(a.actions, b.actions);
   EXPECT_EQ(a.rewards, b.rewards);
   EXPECT_EQ(a.root_values, b.root_values);
+  EXPECT_EQ(a.value_versions, b.value_versions);
   EXPECT_EQ(a.policies, b.policies);
   EXPECT_EQ(a.policy_valid, b.policy_valid);
   EXPECT_EQ(a.final_tokens, b.final_tokens);

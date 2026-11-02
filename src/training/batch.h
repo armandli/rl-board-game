@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include <algorithm>
 #include <mutex>
 #include <random>
 #include <vector>
@@ -20,6 +21,9 @@ namespace s = std;
 //   policy/value/ownership: t+k is not terminal (policy also needs a full search)
 //   reward: the transition t+k -> t+k+1 happened
 //   state: t+k exists (reconstruction; consistency for k >= 1)
+// Value targets are distributions over loss/draw/win; a final result is one
+// hot, a bootstrapped value v is two hot on the support {-1, 0, +1} with
+// expectation v.
 struct TrainingBatch {
   int B = 0, K = 0, T = 0, F = 0, A = 0;
 
@@ -28,7 +32,7 @@ struct TrainingBatch {
   s::vector<int32_t> actions;             // B, K
   s::vector<float>   policies;            // B, K+1, A
   s::vector<float>   policy_mask;         // B, K+1
-  s::vector<int32_t> values;              // B, K+1  outcome class
+  s::vector<float>   values;              // B, K+1, 3
   s::vector<float>   value_mask;          // B, K+1
   s::vector<int32_t> rewards;             // B, K    outcome class
   s::vector<float>   reward_mask;         // B, K
@@ -43,7 +47,7 @@ struct TrainingBatch {
     actions.assign((size_t)b * k, 0);
     policies.assign((size_t)b * (k + 1) * a, 0.f);
     policy_mask.assign((size_t)b * (k + 1), 0.f);
-    values.assign((size_t)b * (k + 1), 1);
+    values.assign((size_t)b * (k + 1) * 3, 0.f);
     value_mask.assign((size_t)b * (k + 1), 0.f);
     rewards.assign((size_t)b * k, 1);
     reward_mask.assign((size_t)b * k, 0.f);
@@ -53,15 +57,34 @@ struct TrainingBatch {
   }
 };
 
+// EfficientZero's off-policy correction of value targets (Ye et al. 2021).
+// A game played by an older network has a value target that bootstraps from
+// a recent search value instead of the final result: state j's target is the
+// rewards of the next l moves plus the root value of state j+l, where
+//   l = max(min_horizon, horizon - age / horizon_decay_steps)
+// shrinks with the game's age in learner steps. The root value must have been
+// searched at most max_value_age steps ago (by self-play, or refreshed by
+// reanalyze); when state j+l's is older the first fresh one after it is used,
+// and without one the target is the final result. horizon 0 always uses the
+// final result, as MuZero does for board games.
+struct ValueTargetConfig {
+  int horizon = 0;
+  int min_horizon = 1;
+  int horizon_decay_steps = 500;
+  int max_value_age = 1000;
+};
+
 // samples positions from a replay buffer and builds unrolled targets, each
-// sample under a random symmetry of the encoder
+// sample under a random symmetry of the encoder; step is the learner step the
+// batch trains, which ages the value targets
 template <typename Game>
 struct BatchBuilder {
-  BatchBuilder(const Encoder<Game>* encoder, int batch_size, int unroll_steps, bool augment)
-  : mEncoder(encoder), mBatchSize(batch_size), mUnroll(unroll_steps), mAugment(augment)
+  BatchBuilder(const Encoder<Game>* encoder, int batch_size, int unroll_steps, bool augment,
+               const ValueTargetConfig& value = ValueTargetConfig())
+  : mEncoder(encoder), mBatchSize(batch_size), mUnroll(unroll_steps), mAugment(augment), mValue(value)
   {}
 
-  void build(const ReplayBuffer& replay, s::mt19937_64& rng, TrainingBatch& batch){
+  void build(const ReplayBuffer& replay, s::mt19937_64& rng, TrainingBatch& batch, int64_t step = 0){
     int T = mEncoder->num_tokens();
     int F = mEncoder->num_features();
     int A = mEncoder->num_actions();
@@ -70,12 +93,12 @@ struct BatchBuilder {
     replay.sample_positions(mBatchSize, rng, mRefs);
     s::uniform_int_distribution<int> sym_dist(0, mAugment ? mEncoder->num_symmetries() - 1 : 0);
     for (int b = 0; b < (int)mRefs.size(); ++b)
-      fill(*mRefs[b].trajectory, mRefs[b].t, sym_dist(rng), b, batch);
+      fill(*mRefs[b].trajectory, mRefs[b].t, sym_dist(rng), b, batch, step);
   }
 
   // writes sample b of batch (already resized): position t of tr unrolled,
   // under symmetry sym
-  void fill(const Trajectory& tr, int t, int sym, int b, TrainingBatch& batch) const {
+  void fill(const Trajectory& tr, int t, int sym, int b, TrainingBatch& batch, int64_t step = 0) const {
     int T = batch.T, F = batch.F, A = batch.A, K = batch.K;
     const s::vector<int>& tmap = mEncoder->token_map(sym);
     const s::vector<int>& amap = mEncoder->action_map(sym);
@@ -100,7 +123,11 @@ struct BatchBuilder {
       }
       if (j < tr.length){
         batch.value_mask[bk] = 1.f;
-        batch.values[bk] = tr.value_target(j) + 1;
+        float v = value_target(tr, j, step);
+        float* vt = batch.values.data() + bk * 3;
+        vt[0] = s::max(-v, 0.f);
+        vt[2] = s::max(v, 0.f);
+        vt[1] = 1.f - vt[0] - vt[2];
         bool flip = tr.to_play[j] != 0;
         for (int i = 0; i < T; ++i){
           int c = tr.final_tokens[i];
@@ -126,11 +153,34 @@ struct BatchBuilder {
     }
   }
 
+  // value target of non-terminal state j for its side to move; the caller
+  // holds tr.policy_mutex
+  float value_target(const Trajectory& tr, int j, int64_t step) const {
+    if (mValue.horizon <= 0) return (float)tr.value_target(j);
+    int64_t age = s::max<int64_t>(0, step - (int64_t)tr.model_version);
+    int64_t shrink = age / s::max(1, mValue.horizon_decay_steps);
+    int l = (int)s::max<int64_t>(s::max(1, mValue.min_horizon), mValue.horizon - shrink);
+    // rewards are for the player who moved
+    float rewards = 0.f;
+    for (int i = j; i < tr.length; ++i){
+      if (i >= j + l){
+        uint32_t version = tr.value_versions[i];
+        if (version != Trajectory::NO_VALUE and step - (int64_t)version <= mValue.max_value_age){
+          float boot = tr.to_play[i] == tr.to_play[j] ? tr.root_values[i] : -tr.root_values[i];
+          return s::clamp(rewards + boot, -1.f, 1.f);
+        }
+      }
+      rewards += tr.to_play[i] == tr.to_play[j] ? tr.rewards[i] : -tr.rewards[i];
+    }
+    return (float)tr.value_target(j);
+  }
+
 protected:
   const Encoder<Game>*  mEncoder;
   int                   mBatchSize;
   int                   mUnroll;
   bool                  mAugment;
+  ValueTargetConfig     mValue;
   s::vector<PositionRef> mRefs;
 };
 

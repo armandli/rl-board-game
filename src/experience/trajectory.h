@@ -23,19 +23,25 @@ struct Trajectory {
   s::vector<uint8_t>   to_play;      // length + 1
   s::vector<int16_t>   actions;      // length
   s::vector<int8_t>    rewards;      // length, for the player who moved
-  s::vector<float>     root_values;  // length, search value for the side to move
   s::vector<uint8_t>   final_tokens; // num_tokens, final board from player 0's view
   int8_t               outcome = 0;  // final result for player 0
 
-  // search policies can be refreshed by reanalyze while the trajectory is
-  // sampled for training, so they are guarded by policy_mutex
-  s::vector<float>     policies;     // length * num_actions
-  s::vector<uint8_t>   policy_valid; // length, 0 for fast (playout capped) searches
+  // search results can be refreshed by reanalyze while the trajectory is
+  // sampled for training, so policies, root values and their versions are
+  // guarded by policy_mutex
+  s::vector<float>     policies;       // length * num_actions
+  s::vector<uint8_t>   policy_valid;   // length, 0 for fast (playout capped) searches
+  s::vector<float>     root_values;    // length, search value for the side to move
+  // length, network version that searched root_values[t], NO_VALUE when the
+  // move was not searched (forced moves)
+  s::vector<uint32_t>  value_versions;
   mutable s::mutex     policy_mutex;
 
   uint64_t             id = 0;       // assigned by the replay buffer
   uint32_t             model_version = 0;
   uint32_t             reanalyzed = 0;
+
+  static constexpr uint32_t NO_VALUE = UINT32_MAX;
 
   // value target of state t: the final result for the side to move
   int value_target(int t) const {

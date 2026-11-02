@@ -27,10 +27,12 @@ namespace sf = std::filesystem;
 //   u32 magic "RLTJ", u32 version, i32 length, i32 observation_size,
 //   i32 num_tokens, i32 num_actions, i8 outcome, u32 model_version,
 //   then features, tokens, to_play, actions, rewards, root_values,
-//   policies, policy_valid, final_tokens as raw little endian arrays
+//   policies, policy_valid, final_tokens, value_versions as raw little
+//   endian arrays. Version 1 records have no value_versions; their root
+//   values load as unversioned.
 struct BinaryExperienceStore : ExperienceStore {
   static constexpr uint32_t MAGIC = 0x4a544c52; // "RLTJ"
-  static constexpr uint32_t VERSION = 1;
+  static constexpr uint32_t VERSION = 2;
 
   BinaryExperienceStore(const s::string& dir, int games_per_file = 1000)
   : mDir(dir), mGamesPerFile(games_per_file)
@@ -63,13 +65,14 @@ struct BinaryExperienceStore : ExperienceStore {
     put_vec(t.to_play);
     put_vec(t.actions);
     put_vec(t.rewards);
-    put_vec(t.root_values);
     {
       s::lock_guard<s::mutex> plock(t.policy_mutex);
+      put_vec(t.root_values);
       put_vec(t.policies);
       put_vec(t.policy_valid);
+      put_vec(t.final_tokens);
+      put_vec(t.value_versions);
     }
-    put_vec(t.final_tokens);
     ++mGamesInFile;
   }
 
@@ -139,7 +142,9 @@ protected:
     s::vector<s::shared_ptr<Trajectory>> out;
     s::ifstream in(path, s::ios::binary);
     while (in.peek() != EOF){
-      if (get<uint32_t>(in) != MAGIC or get<uint32_t>(in) != VERSION)
+      uint32_t magic = get<uint32_t>(in);
+      uint32_t version = get<uint32_t>(in);
+      if (magic != MAGIC or version < 1 or version > VERSION)
         throw s::runtime_error("corrupt experience file " + path.string());
       auto t = s::make_shared<Trajectory>();
       t->length = get<int32_t>(in);
@@ -158,6 +163,8 @@ protected:
       get_vec(in, t->policies, n * t->num_actions);
       get_vec(in, t->policy_valid, n);
       get_vec(in, t->final_tokens, t->num_tokens);
+      if (version >= 2) get_vec(in, t->value_versions, n);
+      else              t->value_versions.assign(n, Trajectory::NO_VALUE);
       // a run killed mid-write leaves a truncated last record
       if (not in) break;
       out.push_back(s::move(t));

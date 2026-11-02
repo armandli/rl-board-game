@@ -167,8 +167,10 @@ protected:
 };
 
 // MuZero Reanalyse: re-runs full searches with the latest network on
-// positions already in the replay buffer and replaces their policy targets,
-// so old games keep yielding targets as good as the current network can make
+// positions already in the replay buffer and replaces their policy targets
+// and root values, so old games keep yielding targets as good as the current
+// network can make. The root values, tagged with model_version, are the
+// fresh bootstrap values of EfficientZero's off-policy value correction.
 template <MuZeroGame Game>
 struct ReanalyzeActor {
   ReanalyzeActor(
@@ -177,8 +179,10 @@ struct ReanalyzeActor {
       SearchFactory<Game> make_search,
       ReplayBuffer* replay,
       SelfPlayStats* stats,
+      s::function<uint32_t()> model_version,
       uint64_t seed)
-  : mConfig(config), mInference(inference), mReplay(replay), mStats(stats), mRng(seed)
+  : mConfig(config), mInference(inference), mReplay(replay), mStats(stats),
+    mModelVersion(s::move(model_version)), mRng(seed)
   {
     for (int i = 0; i < config.games_per_actor; ++i)
       mSlots.push_back(Slot{Game(), make_search(mRng()), nullptr, 0, 0});
@@ -240,6 +244,10 @@ protected:
       s::lock_guard<s::mutex> lock(tr.policy_mutex);
       s::copy(result.policy.begin(), result.policy.end(), tr.policies.begin() + (size_t)slot.t * tr.num_actions);
       tr.policy_valid[slot.t] = 1;
+      if (result.simulations > 0){
+        tr.root_values[slot.t] = result.root_value;
+        tr.value_versions[slot.t] = mModelVersion();
+      }
     }
     mStats->reanalyzed += 1;
     slot.game.apply(tr.actions[slot.t]);
@@ -252,12 +260,13 @@ protected:
     }
   }
 
-  SelfPlayConfig   mConfig;
-  Inference*       mInference;
-  ReplayBuffer*    mReplay;
-  SelfPlayStats*   mStats;
-  s::mt19937_64    mRng;
-  s::vector<Slot>  mSlots;
+  SelfPlayConfig          mConfig;
+  Inference*              mInference;
+  ReplayBuffer*           mReplay;
+  SelfPlayStats*          mStats;
+  s::function<uint32_t()> mModelVersion;
+  s::mt19937_64           mRng;
+  s::vector<Slot>         mSlots;
 };
 
 }  // namespace rlbg

@@ -73,6 +73,10 @@ struct TrainingLoopConfig {
   int       log_interval_s = 30;
 
   SelfPlayConfig        selfplay;
+  // EfficientZero off-policy value correction; a game ages out of the full
+  // horizon over about horizon * horizon_decay_steps learner steps, roughly
+  // the time the replay window covers at the default reuse
+  ValueTargetConfig     value{.horizon = 30, .min_horizon = 3, .horizon_decay_steps = 250, .max_value_age = 1000};
   MCGSConfig            search;
   InferenceServerConfig server;
   MuZeroLearnerConfig   learner;
@@ -187,7 +191,8 @@ struct TrainingLoop {
         });
       } else {
         threads.emplace_back([&, aseed]{
-          ReanalyzeActor<Game> actor(c.selfplay, &server, make_search, &replay, &stats, aseed);
+          ReanalyzeActor<Game> actor(c.selfplay, &server, make_search, &replay, &stats,
+                                     [&]{ return server.weights_version(); }, aseed);
           actor.run(stop);
           server.remove_client();
         });
@@ -225,7 +230,7 @@ struct TrainingLoop {
     };
     s::thread learner_thread([&]{
       s::mt19937_64 lrng(rng());
-      BatchBuilder<Game> builder(mEncoder, c.batch_size, c.unroll_steps, c.augment);
+      BatchBuilder<Game> builder(mEncoder, c.batch_size, c.unroll_steps, c.augment, c.value);
       TrainingBatch batch;
       while (not stop.load() and learner.step() < c.max_steps){
         if (not ratio.learner_may_step(learner.step(), played(), replay.num_positions())){
@@ -233,7 +238,7 @@ struct TrainingLoop {
           waiting_ms += 20;
           continue;
         }
-        builder.build(replay, lrng, batch);
+        builder.build(replay, lrng, batch, learner.step());
         LearnerStats st = learner.train_step(batch);
         {
           s::lock_guard<s::mutex> lock(log_mutex);

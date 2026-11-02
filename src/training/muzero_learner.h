@@ -45,7 +45,8 @@ struct MuZeroLearnerConfig {
 
 // MuZero training on K step unrolls:
 //   policy: cross entropy to the search policy
-//   value, reward: cross entropy over loss/draw/win
+//   value, reward: cross entropy over loss/draw/win; value targets may be
+//     soft (bootstrapped, see ValueTargetConfig)
 //   consistency: EfficientZero's SimSiam loss, negative cosine between the
 //     predicted projection of the unrolled latent and the stop-gradient
 //     projection of the representation of the real state t+k

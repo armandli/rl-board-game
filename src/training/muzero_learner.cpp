@@ -74,7 +74,7 @@ LearnerStats MuZeroLearner::train_step(const TrainingBatch& batch) {
   mx::array actions(batch.actions.begin(), {B, K}, mx::int32);
   mx::array policies(batch.policies.begin(), {B, K + 1, A}, mx::float32);
   mx::array policy_mask(batch.policy_mask.begin(), {B, K + 1}, mx::float32);
-  mx::array values(batch.values.begin(), {B, K + 1}, mx::int32);
+  mx::array values(batch.values.begin(), {B, K + 1, NUM_OUTCOME_CLASSES}, mx::float32);
   mx::array value_mask(batch.value_mask.begin(), {B, K + 1}, mx::float32);
   mx::array rewards(batch.rewards.begin(), {B, K}, mx::int32);
   mx::array reward_mask(batch.reward_mask.begin(), {B, K}, mx::float32);
