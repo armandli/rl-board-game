@@ -2,7 +2,9 @@
 #define RLBG_SEARCH_INFERENCE_H
 
 #include <cstdint>
+#if __has_include(<stdfloat>)
 #include <stdfloat>
+#endif
 #include <string>
 #include <vector>
 
@@ -13,7 +15,12 @@ namespace s = std;
 // latents travel between the network and the search tree in half precision,
 // which halves the tree's memory and the transfer to the device. IEEE binary16,
 // the same bits as mlx::core::float16_t and c10::Half, so backends memcpy it.
+// libc++ has no <stdfloat> yet; clang's builtin _Float16 is the same type
+#if defined(__STDCPP_FLOAT16_T__)
 using latent_t = s::float16_t;
+#else
+using latent_t = _Float16;
+#endif
 
 // a batch of network evaluations requested by searches: initial inference
 // (represent + predict) of observations and recurrent inference (dynamics +
