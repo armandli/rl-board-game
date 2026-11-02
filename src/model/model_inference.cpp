@@ -57,7 +57,7 @@ void ModelInference::infer(const InferenceRequests& requests, InferenceResults& 
     rewards.push_back(mx::zeros({ni}, mx::float32));
   }
   if (nr > 0) {
-    mx::array lat(requests.latents.begin(), {nr, t, d}, mx::float16);
+    mx::array lat(reinterpret_cast<const mx::float16_t*>(requests.latents.data()), {nr, t, d}, mx::float16);
     mx::array act(requests.actions.begin(), {nr}, mx::int32);
     DynamicsOutput dyn = mModel->dynamics(mx::astype(lat, mDtype), act);
     latents.push_back(dyn.latent);

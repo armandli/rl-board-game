@@ -21,8 +21,9 @@ namespace mx = mlx::core;
 mx::Dtype parse_dtype(const s::string& name);
 
 // an Inference whose network weights can be replaced, e.g. by the learner's
-struct UpdatableInference : Inference {
+struct UpdatableInference : SnapshotInference {
   virtual void set_weights(const nn::Params& weights) = 0;
+  void load_weights(const s::string& file) override { set_weights(nn::load_arrays(file)); }
 };
 
 // runs a MuZeroModel on the calling thread; serialized by a mutex. dtype is

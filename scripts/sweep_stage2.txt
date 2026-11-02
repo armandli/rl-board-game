@@ -1,0 +1,6 @@
+# stage 2 on the stable base (game outcome value targets): data pipeline and model size
+s2_base         --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0
+s2_replay200k   --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0 --replay-capacity 200000
+s2_sims32       --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0 --replay-capacity 200000 --simulations 32 --fast-simulations 8
+s2_reuse2       --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0 --replay-capacity 200000 --sample-reuse 2
+s2_d256         --dims 256 --heads 8 --repr-layers 6 --dyn-layers 4 --pred-layers 2 --proj-dims 256 --batch-size 256 --value-horizon 0 --replay-capacity 200000

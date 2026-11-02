@@ -1,0 +1,5 @@
+# value learning stability on a fast model: bootstrapped value targets and learning rate
+base_h30_lr1e-3   --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256
+h0_lr1e-3         --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0
+h30_lr3e-4        --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --lr 3e-4 --muon-lr 0.005
+h0_lr3e-4         --dims 192 --heads 6 --repr-layers 4 --dyn-layers 3 --pred-layers 1 --proj-dims 192 --batch-size 256 --value-horizon 0 --lr 3e-4 --muon-lr 0.005

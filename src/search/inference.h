@@ -2,18 +2,18 @@
 #define RLBG_SEARCH_INFERENCE_H
 
 #include <cstdint>
+#include <stdfloat>
+#include <string>
 #include <vector>
-
-#include <mlx/mlx.h>
 
 namespace rlbg {
 
 namespace s = std;
-namespace mx = mlx::core;
 
 // latents travel between the network and the search tree in half precision,
-// which halves the tree's memory and the transfer to the device
-using latent_t = mx::float16_t;
+// which halves the tree's memory and the transfer to the device. IEEE binary16,
+// the same bits as mlx::core::float16_t and c10::Half, so backends memcpy it.
+using latent_t = s::float16_t;
 
 // a batch of network evaluations requested by searches: initial inference
 // (represent + predict) of observations and recurrent inference (dynamics +
@@ -72,6 +72,12 @@ struct Inference {
   virtual int observation_size() const = 0;
   virtual int latent_size() const = 0;
   virtual int num_actions() const = 0;
+};
+
+// an Inference whose network weights load from a snapshot file written by
+// the same ML framework; evaluation and play load snapshots through it
+struct SnapshotInference : Inference {
+  virtual void load_weights(const s::string& file) = 0;
 };
 
 }  // namespace rlbg

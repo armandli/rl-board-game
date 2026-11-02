@@ -79,3 +79,37 @@ if(TARGET training)
 
   target_link_libraries(othello_mcgs_selfplay_train training CLI11::CLI11)
 endif()
+
+# MuZero self-play training, arena and play for othello on LibTorch
+if(TARGET rlbg_libtorch)
+  add_executable(othello_muzero_torch_train othello_muzero_torch_train.cpp)
+
+  set_property(TARGET othello_muzero_torch_train PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(othello_muzero_torch_train rlbg_libtorch CLI11::CLI11)
+endif()
+
+if(TARGET rlbg_libtorch)
+  add_executable(othello_muzero_torch_bench othello_muzero_torch_bench.cpp)
+
+  set_property(TARGET othello_muzero_torch_bench PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(othello_muzero_torch_bench rlbg_libtorch CLI11::CLI11)
+endif()
+
+if(TARGET rlbg_libtorch)
+  add_executable(othello_muzero_torch_arena othello_muzero_torch_arena.cpp)
+
+  set_property(TARGET othello_muzero_torch_arena PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(othello_muzero_torch_arena rlbg_libtorch CLI11::CLI11)
+endif()
+
+if(TARGET rlbg_libtorch)
+  add_executable(othello_muzero_torch_play othello_muzero_torch_play.cpp)
+
+  set_property(TARGET othello_muzero_torch_play PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(othello_muzero_torch_play rlbg_libtorch CLI11::CLI11
+    ftxui::screen ftxui::dom ftxui::component)
+endif()

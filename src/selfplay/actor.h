@@ -188,6 +188,10 @@ struct ReanalyzeActor {
       mSlots.push_back(Slot{Game(), make_search(mRng()), nullptr, 0, 0});
   }
 
+  // pause, when set, is polled every step; reanalyze waits while it returns
+  // true, e.g. while self-play waits for the learner
+  void set_pause(s::function<bool()> pause){ mPause = s::move(pause); }
+
   void run(const s::atomic<bool>& stop){
     InferenceRequests requests;
     requests.observation_size = mInference->observation_size();
@@ -196,6 +200,10 @@ struct ReanalyzeActor {
     s::vector<int> waiting;
     for (Slot& slot : mSlots) next_trajectory(slot);
     while (not stop.load(s::memory_order_relaxed)){
+      if (mPause and mPause()){
+        s::this_thread::sleep_for(s::chrono::milliseconds(5));
+        continue;
+      }
       requests.clear();
       waiting.clear();
       for (int i = 0; i < (int)mSlots.size(); ++i){
@@ -267,6 +275,7 @@ protected:
   s::function<uint32_t()> mModelVersion;
   s::mt19937_64           mRng;
   s::vector<Slot>         mSlots;
+  s::function<bool()>     mPause;
 };
 
 }  // namespace rlbg
