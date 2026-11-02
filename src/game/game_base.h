@@ -46,7 +46,7 @@ struct GameState {
   bool is_valid(PlayerMove pm) const {
     return static_cast<const Sub*>(this)->is_valid(pm);
   }
-  s::vector<Move> legal_moves() const {
+  auto legal_moves() const {
     return static_cast<const Sub*>(this)->legal_moves();
   }
   bool apply(PlayerMove pm){

@@ -96,6 +96,14 @@ constexpr s::array<Dr, 8> EIGHT_WAY {
   Dr( 1,-1),
 };
 
+// splitmix64 finalizer, for hashing bitboards
+[[gnu::always_inline]] inline uint64_t mix64(uint64_t x){
+  x += 0x9e3779b97f4a7c15ULL;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+  return x ^ (x >> 31);
+}
+
 [[gnu::always_inline]] inline Neighbours4 neighbours(Pt p){
   return Neighbours4{
     Pt(p.r-1, p.c),
@@ -138,6 +146,7 @@ struct Move {
   M  mty;
   Pt mpt;
 
+  Move(): mty(M::Unknown), mpt(0, 0) {}
   explicit Move(M ty): mty(ty) {
     assert(mty != M::Play);
   }
@@ -163,6 +172,25 @@ inline bool operator==(const Move& a, const Move& b){
 inline bool operator!=(const Move& a, const Move& b){
   return not operator==(a, b);
 }
+
+// fixed capacity list of moves, so move generation does not allocate
+template <uint N>
+struct MoveList {
+  s::array<Move, N> moves;
+  uint              count = 0;
+
+  void push_back(Move m){
+    assert(count < N);
+    moves[count++] = m;
+  }
+  size_t size() const { return count; }
+  bool empty() const { return count == 0; }
+  const Move& operator[](size_t i) const { return moves[i]; }
+  const Move& front() const { return moves[0]; }
+  const Move& back() const { return moves[count-1]; }
+  const Move* begin() const { return moves.data(); }
+  const Move* end() const { return moves.data() + count; }
+};
 
 inline s::ostream& operator<<(s::ostream& out, const Move& move){
   switch (move.mty){

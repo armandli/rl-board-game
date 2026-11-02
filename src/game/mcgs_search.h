@@ -53,10 +53,12 @@ struct MCPlayout {
       Player player)
   {
     float res = 0.;
+    // play out on the state itself and roll back, instead of copying it
+    Sub& s = *static_cast<Sub*>(state);
     for (uint i = 0; i < n; ++i){
-      Sub s(*static_cast<Sub*>(state));
+      int steps = 0;
       while (not s.is_terminal()){
-        s::vector<Move> moves = s.legal_moves();
+        auto moves = s.legal_moves();
 
         assert(moves.size() > 0);
 
@@ -65,13 +67,16 @@ struct MCPlayout {
 
         assert(idx < moves.size());
 
-        s.apply(PlayerMove(s.next_player(), moves[idx]));
+        [[maybe_unused]] bool applied = s.apply(PlayerMove(s.next_player(), moves[idx]));
+        assert(applied);
+        steps++;
       }
       res += s.score(player);
+      s.rollback(steps);
     }
 
     // fake p(a)
-    s::vector<Move> moves = state->legal_moves();
+    auto moves = state->legal_moves();
     s::vector<float> ps(moves.size(), 1.f);
 
     return s::make_pair((float)(res/n), ps);
@@ -86,7 +91,7 @@ struct UCTSelector {
     assert(node != nullptr);
     assert(node->state != nullptr);
 
-    s::vector<Move> moves = node->state->legal_moves();
+    auto moves = node->state->legal_moves();
 
     assert(node->pa.size() == moves.size());
     assert(moves.size() > 0);

@@ -2,10 +2,12 @@
 #define RLBG_CONNECTX
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <iostream>
 #include <ostream>
 #include <vector>
@@ -24,30 +26,39 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
   static constexpr uint RZ = R;
   static constexpr uint CZ = C;
   static constexpr uint SZ = R * C;
+  // bitboard layout is column major with HZ bits per column; the spare top bit
+  // of each column stays empty so lines cannot wrap into the next column
+  static constexpr uint HZ = R + 1;
+  static_assert(HZ * CZ <= 64, "ConnectX board must fit in a 64 bit bitboard");
 
-  ConnectXBoard(){
-    s::memset(mBoard.data(), (uint)Player::Unknown, sizeof(ubyte) * SZ);
+  ConnectXBoard(): mBlack(0), mWhite(0) {
     s::memset(mTop.data(), 0U, sizeof(ubyte) * CZ);
   }
   ConnectXBoard(const ConnectXBoard& o){
-    mBoard = o.mBoard;
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mTop = o.mTop;
   }
   ConnectXBoard& operator=(const ConnectXBoard& o){
-    mBoard = o.mBoard;
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mTop = o.mTop;
     return *this;
   }
-  ConnectXBoard(ConnectXBoard&& o) noexcept : mBoard(s::move(o.mBoard)), mTop(s::move(o.mTop)) {}
+  ConnectXBoard(ConnectXBoard&& o) noexcept : mBlack(o.mBlack), mWhite(o.mWhite), mTop(s::move(o.mTop)) {}
   ConnectXBoard& operator=(ConnectXBoard&& o){
-    //TODO: correct ?
-    mBoard = s::move(o.mBoard);
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mTop = s::move(o.mTop);
     return *this;
   }
 
   const s::array<ubyte,CZ>& tops() const {
     return mTop;
+  }
+  uint64_t pieces(Player player) const {
+    assert(player != Player::Unknown);
+    return player == Player::Black ? mBlack : mWhite;
   }
 
   bool is_valid(Player player, Pt pt) const {
@@ -57,31 +68,47 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
   }
   Player operator[](Pt pt) const {
     assert(pt.r < RZ and pt.c < CZ);
-    return mBoard[index<CZ>(pt)];
+    uint64_t m = bit(pt.r, pt.c);
+    if (mBlack & m) return Player::Black;
+    if (mWhite & m) return Player::White;
+    return Player::Unknown;
   }
   void place(Player player, Pt pt){
     assert(is_valid(player, pt));
-    ubyte topr = mTop[pt.c];
-    mBoard[index<CZ>(Pt(topr, pt.c))] = player;
+    uint64_t m = bit(mTop[pt.c], pt.c);
+    if (player == Player::Black) mBlack |= m;
+    else                         mWhite |= m;
     mTop[pt.c] += 1;
   }
   void revert(Pt pt){
     assert(pt.c < CZ);
     ubyte topr = mTop[pt.c];
     assert(topr > 0);
-    mBoard[index<CZ>(Pt(topr-1, pt.c))] = Player::Unknown;
+    uint64_t m = bit(topr-1, pt.c);
+    mBlack &= ~m;
+    mWhite &= ~m;
     mTop[pt.c]--;
+  }
+  // true if player has X in a row: vertical, horizontal and both diagonals
+  template <ubyte X>
+  bool has_line(Player player) const {
+    uint64_t b = pieces(player);
+    for (uint d : {1U, HZ, HZ + 1, HZ - 1}){
+      uint64_t m = b;
+      for (uint k = 1; k < X and m; ++k)
+        m &= k * d < 64 ? b >> (k * d) : 0ULL;
+      if (m) return true;
+    }
+    return false;
+  }
+  bool is_full() const {
+    return (uint)s::popcount(mBlack | mWhite) == SZ;
   }
   size_t size() const {
     return SZ;
   }
   size_t hash() const {
-    size_t h = 0;
-    for (uint i = 0; i < mBoard.size(); ++i){
-      if (mBoard[i] != Player::Unknown)
-        h ^= zobrist_hash((uint)mBoard[i], i);
-    }
-    return h;
+    return mix64(mBlack) ^ mix64(mWhite ^ 0x9e3779b97f4a7c15ULL);
   }
   s::ostream& print(s::ostream& out) const {
     char bchar = 'X';
@@ -90,7 +117,7 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
     for (int r = RZ-1; r >= 0; --r){
       out << "|";
       for (int c = 0; c < CZ; ++c)
-        switch (mBoard[index<CZ>(Pt(r, c))]){
+        switch ((*this)[Pt(r, c)]){
         case Player::Black:
           out << bchar;
         break; case Player::White:
@@ -105,8 +132,13 @@ struct ConnectXBoard : Board<ConnectXBoard<R,C>> {
   }
 
 private:
-  s::array<Player, SZ> mBoard;
-  s::array<ubyte,  CZ> mTop;
+  static uint64_t bit(uint r, uint c){
+    return 1ULL << (c * HZ + r);
+  }
+
+  uint64_t            mBlack;
+  uint64_t            mWhite;
+  s::array<ubyte, CZ> mTop;
 };
 
 template <ubyte R, ubyte C>
@@ -114,131 +146,15 @@ s::ostream& operator<<(s::ostream& out, const ConnectXBoard<R, C>& board){
   return board.print(out);
 }
 
-//TODO: write unit test
 template <ubyte RZ, ubyte CZ, ubyte X>
 s::pair<bool, Player> compute_termination(const ConnectXBoard<RZ,CZ>& board){
-  int max_count = 0;
-  Player max_player = Player::Unknown;
-  // NOTE: outter for loops can be parallelized
-  for (int r = 0; r < RZ; ++r){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int c = 0; c < CZ; ++c)
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r,c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(r,c)];
-      } else
-        count += 1;
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-  for (int c = 0; c < CZ; ++c){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int r = 0; r < RZ; ++r)
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r,c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(r,c)];
-      } else
-        count += 1;
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-  for (int r = RZ-1; r >= 0; --r){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int c = 0; c + r < RZ and c < CZ; ++c){
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(c+r,c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(c+r,c)];
-      } else
-        count += 1;
-    }
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-  for (int r = 0; r < RZ; ++r){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int c = CZ-1; r-((int)CZ-1-c) >= 0 and c >= 0; --c){
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r-(CZ-1-c),c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(r-(CZ-1-c),c)];
-      } else
-        count += 1;
-    }
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-  for (int r = RZ-1; r >= 0; --r){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int c = 0; r-c >= 0 and c < CZ; ++c){
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r-c,c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(r-c,c)];
-      } else
-        count += 1;
-    }
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-  for (int r = RZ-1; r >= 0; --r){
-    int count = 0;
-    Player prev_piece = Player::Unknown;
-    for (int c = CZ-1; r+((int)CZ-1-c) < RZ and c >= 0; --c){
-      if (prev_piece == Player::Unknown or prev_piece != board[Pt(r+(CZ-1-c),c)]){
-        if (count > max_count){
-          max_count = count;
-          max_player = prev_piece;
-        }
-        count = 1;
-        prev_piece = board[Pt(r+(CZ-1-c),c)];
-      } else
-        count += 1;
-    }
-    if (count > max_count){
-      max_count = count;
-      max_player = prev_piece;
-    }
-  }
-
-  if (max_count >= X)
-    return s::make_pair(true, max_player);
+  if (board.template has_line<X>(Player::Black))
+    return s::make_pair(true, Player::Black);
+  if (board.template has_line<X>(Player::White))
+    return s::make_pair(true, Player::White);
 
   // terminal if board is completely filled
-  ubyte min_row = *s::min_element(s::begin(board.tops()), s::end(board.tops()));
-  if (min_row == RZ)
+  if (board.is_full())
     return s::make_pair(true, Player::Unknown);
   else
     return s::make_pair(false, Player::Unknown);
@@ -312,9 +228,9 @@ struct ConnectXGameState : GameState<ConnectXBoard<R,C>, ConnectXGameState<R,C,X
     }
     return false;
   }
-  s::vector<Move> legal_moves() const {
-    if (is_terminal()) return s::vector<Move>();
-    s::vector<Move> moves;
+  MoveList<CZ> legal_moves() const {
+    MoveList<CZ> moves;
+    if (is_terminal()) return moves;
     for (int c = 0; c < CZ; ++c)
       if (mBoard.is_valid(mNPlayer, Pt(0,c)))
         moves.push_back(Move(M::Play, Pt(0,c)));
@@ -335,15 +251,17 @@ struct ConnectXGameState : GameState<ConnectXBoard<R,C>, ConnectXGameState<R,C,X
     for (size_t i = 0; i < n; ++i){
       PlayerMove pm = mHistory.back();
       mHistory.pop_back();
-      if (pm.move.mty != M::Play) continue;
-
-      if (pm.move.mty == M::Play){
+      if (pm.move.mty == M::Play)
         mBoard.revert(pm.move.mpt);
-      }
     }
     if (mHistory.size() > 0) mNPlayer = opponent(mHistory.back().player);
     else                     mNPlayer = Player::Black;
-    run_test_termination();
+    // apply() refuses to move from a terminal state, so every earlier state
+    // in the history was still in play
+    if (n > 0){
+      mTerminal = false;
+      mWinner = Player::Unknown;
+    }
   }
   bool is_terminal() const {
     return mTerminal;
@@ -368,7 +286,6 @@ struct ConnectXGameState : GameState<ConnectXBoard<R,C>, ConnectXGameState<R,C,X
   }
 
 protected:
-  // this function need to be efficient
   void run_test_termination(){
     auto [is_terminal, winner] = compute_termination<R,C,X>(mBoard);
     mTerminal = is_terminal;

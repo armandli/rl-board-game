@@ -124,22 +124,45 @@ TEST(ConnectX, MovedBoardKeepsColumnHeights){
   EXPECT_EQ(moved[r::Pt(2, 2)], r::Player::Black);
 }
 
-TEST(ConnectX, TerminationMatchesBruteForce){
-  std::mt19937_64 rng(9);
-  for (int game = 0; game < 3000; ++game){
-    Connect4 g;
+namespace {
+
+template <ubyte R, ubyte C, ubyte X>
+void check_termination_against_brute_force(int games, uint64_t seed){
+  using G = r::ConnectXGameState<R, C, X>;
+  std::mt19937_64 rng(seed);
+  for (int game = 0; game < games; ++game){
+    G g;
+    std::vector<size_t> hashes;
     while (not g.is_terminal()){
-      std::vector<r::Move> moves = g.legal_moves();
+      auto moves = g.legal_moves();
       ASSERT_FALSE(moves.empty());
       r::Move m = moves[std::uniform_int_distribution<int>(0, (int)moves.size() - 1)(rng)];
+      hashes.push_back(g.hash());
       ASSERT_TRUE(g.apply(r::PlayerMove(g.next_player(), m)));
-      r::Player ref = reference_winner<6, 7, 4>(g.board());
+      r::Player ref = reference_winner<R, C, X>(g.board());
       if (ref != r::Player::Unknown){
         ASSERT_TRUE(g.is_terminal()) << "game " << game << " missed a win\n" << g.board();
         ASSERT_EQ(g.winner(), ref) << "game " << game << "\n" << g.board();
       }
     }
     if (g.winner() != r::Player::Unknown)
-      ASSERT_EQ(g.winner(), (reference_winner<6, 7, 4>(g.board()))) << "game " << game << "\n" << g.board();
+      ASSERT_EQ(g.winner(), (reference_winner<R, C, X>(g.board()))) << "game " << game << "\n" << g.board();
+    // unwinding one move at a time revisits every earlier position
+    while (not hashes.empty()){
+      g.rollback(1);
+      ASSERT_FALSE(g.is_terminal());
+      ASSERT_EQ(g.hash(), hashes.back()) << "game " << game;
+      hashes.pop_back();
+    }
   }
+}
+
+} // namespace
+
+TEST(ConnectX, TerminationMatchesBruteForce){
+  check_termination_against_brute_force<6, 7, 4>(3000, 9);
+  check_termination_against_brute_force<5, 5, 3>(1000, 10);
+  check_termination_against_brute_force<4, 4, 3>(1000, 11);
+  check_termination_against_brute_force<3, 3, 3>(1000, 12);
+  check_termination_against_brute_force<4, 9, 5>(1000, 13);
 }

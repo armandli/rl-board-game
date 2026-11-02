@@ -2,10 +2,11 @@
 #define RLBG_OTHELLO
 
 #include <cassert>
-#include <cstring>
+#include <cstdint>
 
 #include <array>
-#include <unordered_set>
+#include <bit>
+#include <ostream>
 #include <vector>
 
 #include <type_alias.h>
@@ -17,166 +18,99 @@ namespace rlbg {
 
 namespace s = std;
 
+// bitboard with bit index r * SZ + c; the flip stack keeps the discs flipped
+// by each placement so revert can undo it
 template <ubyte SZ>
 struct OthelloBoard : Board<OthelloBoard<SZ>> {
   static constexpr uint IZ = SZ * SZ;
+  static_assert(IZ <= 64, "Othello Board must fit in a 64 bit bitboard");
 
-  OthelloBoard(){
+  OthelloBoard(): mBlack(0), mWhite(0) {
     static_assert(SZ % 2 == 0, "Othello Board size must be divisible by 2");
 
-    s::memset(mBoard.data(), (uint)Player::Unknown, sizeof(ubyte)*IZ);
-    mBoard[index<SZ>(Pt(SZ/2-1,SZ/2))]   = Player::Black;
-    mBoard[index<SZ>(Pt(SZ/2,  SZ/2-1))] = Player::Black;
-    mBoard[index<SZ>(Pt(SZ/2-1,SZ/2-1))] = Player::White;
-    mBoard[index<SZ>(Pt(SZ/2  ,SZ/2))]   = Player::White;
-
-    for (Pt pt : surroundings(Pt(SZ/2-1,SZ/2)))
-      if (check_placement_valid(Player::White, pt))
-        mWhiteCache.insert(pt);
-    for (Pt pt : surroundings(Pt(SZ/2,SZ/2-1)))
-      if (check_placement_valid(Player::White, pt))
-        mWhiteCache.insert(pt);
-    for (Pt pt : surroundings(Pt(SZ/2-1,SZ/2-1)))
-      if (check_placement_valid(Player::Black, pt))
-        mBlackCache.insert(pt);
-    for (Pt pt : surroundings(Pt(SZ/2,SZ/2)))
-      if (check_placement_valid(Player::Black, pt))
-        mBlackCache.insert(pt);
+    mBlack = bit(Pt(SZ/2-1,SZ/2))   | bit(Pt(SZ/2,  SZ/2-1));
+    mWhite = bit(Pt(SZ/2-1,SZ/2-1)) | bit(Pt(SZ/2  ,SZ/2));
   }
   OthelloBoard(const OthelloBoard& o){
-    mBoard = o.mBoard;
-    mBlackCache = o.mBlackCache;
-    mWhiteCache = o.mWhiteCache;
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mFlipStack = o.mFlipStack;
   }
   OthelloBoard& operator=(const OthelloBoard& o){
-    mBoard = o.mBoard;
-    mBlackCache = o.mBlackCache;
-    mWhiteCache = o.mWhiteCache;
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mFlipStack = o.mFlipStack;
     return *this;
   }
   OthelloBoard(OthelloBoard&& o) noexcept
-  : mBoard(s::move(o.mBoard)),
-    mBlackCache(s::move(o.mBlackCache)),
-    mWhiteCache(s::move(o.mWhiteCache)),
+  : mBlack(o.mBlack),
+    mWhite(o.mWhite),
     mFlipStack(s::move(o.mFlipStack))
   {}
   OthelloBoard& operator=(OthelloBoard&& o){
-    mBoard = s::move(o.mBoard);
-    mBlackCache = s::move(o.mBlackCache);
-    mWhiteCache = s::move(o.mWhiteCache);
+    mBlack = o.mBlack;
+    mWhite = o.mWhite;
     mFlipStack = s::move(o.mFlipStack);
     return *this;
   }
 
-  const uset<Pt>& get_legal_moves(Player player) const {
+  // placements for player as a bitmask
+  uint64_t legal_mask(Player player) const {
+    return legal(pieces(player), pieces(opponent(player)));
+  }
+  uint64_t pieces(Player player) const {
     switch (player){
     case Player::Black:
-      return mBlackCache;
+      return mBlack;
     break; case Player::White:
-      return mWhiteCache;
+      return mWhite;
     break; case Player::Unknown: default:
       assert(false);
     }
+    return 0;
   }
   size_t count_player_piece(Player player) const {
-    size_t sum = 0;
-    for (uint i = 0; i < IZ; ++i)
-      if (mBoard[i] == player)
-        sum += 1;
-    return sum;
+    return s::popcount(pieces(player));
   }
 
   bool is_valid(Player player, Pt pt) const {
     if (not is_on_board(pt)) return false;
-    if (mBoard[index<SZ>(pt)] != Player::Unknown) return false;
-
-    switch (player){
-    case Player::Black:
-      return mBlackCache.contains(pt);
-    break; case Player::White:
-      return mWhiteCache.contains(pt);
-    break; case Player::Unknown: default:
-      assert(false);
-    }
+    return legal_mask(player) & bit(pt);
   }
   Player operator[](Pt pt) const {
     assert(pt.r >= 0 and pt.r < SZ and pt.c >= 0 and pt.c < SZ);
-    return mBoard[index<SZ>(pt)];
+    uint64_t m = bit(pt);
+    if (mBlack & m) return Player::Black;
+    if (mWhite & m) return Player::White;
+    return Player::Unknown;
   }
   void place(Player player, Pt pt){
     assert(is_valid(player, pt));
-    mBoard[index<SZ>(pt)] = player;
-    s::vector<Pt> flipped;
-    for (Dr d : EIGHT_WAY)
-      flip_stack_record(player, pt+d, d, flipped);
-    mFlipStack.push_back(s::move(flipped));
-    uset<Pt> to_remove;
-    for (Pt p : mBlackCache)
-      if (not check_placement_valid(Player::Black, p))
-        to_remove.insert(p);
-    for (Pt p : to_remove)
-      mBlackCache.erase(p);
-    to_remove.clear();
-    for (Pt p : mWhiteCache)
-      if (not check_placement_valid(Player::White, p))
-        to_remove.insert(p);
-    for (Pt p : to_remove)
-      mWhiteCache.erase(p);
-    for (uint i = 0; i < IZ; ++i){
-      if (mBoard[i] != Player::Unknown){
-        for (Pt p : surroundings(point<SZ>(i))){
-          if (check_placement_valid(Player::Black, p))
-            mBlackCache.insert(p);
-          if (check_placement_valid(Player::White, p))
-            mWhiteCache.insert(p);
-        }
-      }
-    }
+    uint64_t& own = player == Player::Black ? mBlack : mWhite;
+    uint64_t& opp = player == Player::Black ? mWhite : mBlack;
+    uint64_t f = flips(own, opp, bit(pt));
+    own |= f | bit(pt);
+    opp &= ~f;
+    mFlipStack.push_back(f);
   }
   void revert(Pt pt){
-    Player rp = mBoard[index<SZ>(pt)];
-    mBoard[index<SZ>(pt)] = Player::Unknown;
+    Player rp = (*this)[pt];
+    assert(rp != Player::Unknown);
+    uint64_t& own = rp == Player::Black ? mBlack : mWhite;
+    uint64_t& opp = rp == Player::Black ? mWhite : mBlack;
+    own &= ~bit(pt);
 
     if (not mFlipStack.empty()){
-      for (Pt p : mFlipStack.back())
-        mBoard[index<SZ>(p)] = opponent(rp);
+      own &= ~mFlipStack.back();
+      opp |= mFlipStack.back();
       mFlipStack.pop_back();
-    }
-
-    uset<Pt> to_remove;
-    for (Pt p : mBlackCache)
-      if (not check_placement_valid(Player::Black, p))
-        to_remove.insert(p);
-    for (Pt p : to_remove)
-      mBlackCache.erase(p);
-    to_remove.clear();
-    for (Pt p : mWhiteCache)
-      if (not check_placement_valid(Player::White, p))
-        to_remove.insert(p);
-    for (Pt p : to_remove)
-      mWhiteCache.erase(p);
-
-    for (uint i = 0; i < IZ; ++i){
-      if (mBoard[i] == Player::Unknown){
-        if (check_placement_valid(Player::Black, point<SZ>(i)))
-          mBlackCache.insert(point<SZ>(i));
-        if (check_placement_valid(Player::White, point<SZ>(i)))
-          mWhiteCache.insert(point<SZ>(i));
-      }
     }
   }
   size_t size() const {
     return IZ;
   }
   size_t hash() const {
-    size_t h = 0;
-    for (uint i = 0; i < mBoard.size(); ++i){
-      if (mBoard[i] != Player::Unknown)
-        h ^= zobrist_hash((uint)mBoard[i], i);
-    }
-    return h;
+    return mix64(mBlack) ^ mix64(mWhite ^ 0x9e3779b97f4a7c15ULL);
   }
   s::ostream& print(s::ostream& out) const {
     char bchar = 'X';
@@ -191,7 +125,7 @@ struct OthelloBoard : Board<OthelloBoard<SZ>> {
     for (uint r = 0; r < SZ; ++r){
       out << ' ' << r << ' ';
       for (uint c = 0; c < SZ; ++c){
-        switch (mBoard[index<SZ>(Pt(r,c))]){
+        switch ((*this)[Pt(r,c)]){
         case Player::Black:
           out << bchar;
         break; case Player::White:
@@ -207,53 +141,68 @@ struct OthelloBoard : Board<OthelloBoard<SZ>> {
   }
 
 protected:
-  bool is_on_board(Pt pt) const {
+  static constexpr uint64_t BOARD = IZ == 64 ? ~0ULL : (1ULL << IZ) - 1;
+  static constexpr uint64_t column_mask(uint c){
+    uint64_t m = 0;
+    for (uint r = 0; r < SZ; ++r)
+      m |= 1ULL << (r * SZ + c);
+    return m;
+  }
+  // runs that move across columns must not wrap around the board edge, so
+  // they can only pass through the inner columns
+  static constexpr uint64_t INNER = BOARD & ~column_mask(0) & ~column_mask(SZ-1);
+  // east, south, south-east, south-west
+  static constexpr int      DIRS[4]  = {1, SZ, SZ + 1, SZ - 1};
+  static constexpr uint64_t MASKS[4] = {INNER, BOARD, INNER, INNER};
+
+  static bool is_on_board(Pt pt){
     return pt.r >= 0 and pt.r < SZ and pt.c >= 0 and pt.c < SZ;
   }
-  bool check_placement_valid(Player player, Pt pt) const {
-    if (not is_on_board(pt)) return false;
-    if (mBoard[index<SZ>(pt)] != Player::Unknown) return false;
-
-    for (Dr d : EIGHT_WAY){
-      bool found_opponent = false;
-      for (Pt p = pt + d; is_on_board(p); p += d){
-        if (mBoard[index<SZ>(p)] == Player::Unknown)
-          break;
-        if (not found_opponent and mBoard[index<SZ>(p)] == player)
-          break;
-        if (not found_opponent and mBoard[index<SZ>(p)] != player){
-          found_opponent = true;
-          continue;
+  static uint64_t bit(Pt pt){
+    return 1ULL << index<SZ>(pt);
+  }
+  static uint64_t shift(uint64_t b, int d){
+    return d > 0 ? b << d : b >> -d;
+  }
+  // squares one step beyond each run of mo that starts next to p
+  static uint64_t sweep(uint64_t p, uint64_t mo, int d){
+    uint64_t x = shift(p, d) & mo;
+    for (int i = 0; i < (int)SZ - 3; ++i)
+      x |= shift(x, d) & mo;
+    return shift(x, d);
+  }
+  // placements for p against o, flood fill along the eight directions
+  static uint64_t legal(uint64_t p, uint64_t o){
+    uint64_t empty = ~(p | o) & BOARD;
+    uint64_t moves = 0;
+    for (int i = 0; i < 4; ++i){
+      uint64_t mo = o & MASKS[i];
+      moves |= sweep(p, mo, DIRS[i]) & empty;
+      moves |= sweep(p, mo, -DIRS[i]) & empty;
+    }
+    return moves;
+  }
+  // discs of o flipped by p placing on square m
+  static uint64_t flips(uint64_t p, uint64_t o, uint64_t m){
+    uint64_t f = 0;
+    for (int i = 0; i < 4; ++i){
+      uint64_t mo = o & MASKS[i];
+      for (int d : {DIRS[i], -DIRS[i]}){
+        uint64_t x = 0;
+        uint64_t t = shift(m, d);
+        while (t & mo){
+          x |= t;
+          t = shift(t, d);
         }
-        if (found_opponent and mBoard[index<SZ>(p)] == player)
-          return true;
+        if (t & p) f |= x;
       }
     }
-    return false;
-  }
-  void flip_stack_record(Player player, Pt pt, Dr d, s::vector<Pt>& flipped){
-    // count opponent pieces before the anchor; bail if no anchor found
-    uint count = 0;
-    bool anchored = false;
-    for (Pt p = pt; is_on_board(p); p += d){
-      if (mBoard[index<SZ>(p)] == Player::Unknown) return;
-      if (mBoard[index<SZ>(p)] == player){
-        anchored = true;
-        break;
-      }
-      count++;
-    }
-    if (not anchored or count == 0) return;
-    for (Pt p = pt; count > 0; p += d, --count){
-      mBoard[index<SZ>(p)] = player;
-      flipped.push_back(p);
-    }
+    return f;
   }
 
-  s::array<Player, IZ>     mBoard;
-  uset<Pt>                 mBlackCache;
-  uset<Pt>                 mWhiteCache;
-  s::vector<s::vector<Pt>> mFlipStack;
+  uint64_t            mBlack;
+  uint64_t            mWhite;
+  s::vector<uint64_t> mFlipStack;
 };
 
 template <ubyte SZ>
@@ -266,7 +215,9 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
   OthelloGameState()
   : mBoard(), mNPlayer(Player::Black), mHistory(),
     mWinner(Player::Unknown), mTerminal(false)
-  {}
+  {
+    mLegal = mBoard.legal_mask(mNPlayer);
+  }
   OthelloGameState(
       const OthelloBoard<SZ>& board,
       Player nxt_player,
@@ -275,11 +226,14 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
       Player winner)
   : mBoard(board), mNPlayer(nxt_player), mHistory(history),
     mWinner(winner), mTerminal(term)
-  {}
+  {
+    mLegal = mBoard.legal_mask(mNPlayer);
+  }
   OthelloGameState(const OthelloGameState& o)
   : mBoard(o.mBoard),
     mNPlayer(o.mNPlayer),
     mHistory(o.mHistory),
+    mLegal(o.mLegal),
     mWinner(o.mWinner),
     mTerminal(o.mTerminal)
   {}
@@ -287,6 +241,7 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
     mBoard = o.mBoard;
     mNPlayer = o.mNPlayer;
     mHistory = o.mHistory;
+    mLegal = o.mLegal;
     mWinner = o.mWinner;
     mTerminal = o.mTerminal;
     return *this;
@@ -295,15 +250,16 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
   : mBoard(s::move(o.mBoard)),
     mNPlayer(o.mNPlayer),
     mHistory(s::move(o.mHistory)),
+    mLegal(o.mLegal),
     mWinner(o.mWinner),
     mTerminal(o.mTerminal)
   {}
   OthelloGameState& operator=(OthelloGameState&& o){
-    //TODO: correct ?
-    mBoard   = s::move(o.mBoard);
-    mNPlayer = o.mNPlayer;
-    mHistory = s::move(o.mHistory);
-    mWinner  = o.mWinner;
+    mBoard    = s::move(o.mBoard);
+    mNPlayer  = o.mNPlayer;
+    mHistory  = s::move(o.mHistory);
+    mLegal    = o.mLegal;
+    mWinner   = o.mWinner;
     mTerminal = o.mTerminal;
     return *this;
   }
@@ -318,6 +274,8 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
     if (is_terminal()) return false;
     switch (pm.move.mty){
     case M::Play:
+      if (pm.player == mNPlayer)
+        return is_on_board(pm.move.mpt) and (mLegal >> index<SZ>(pm.move.mpt)) & 1ULL;
       return mBoard.is_valid(pm.player, pm.move.mpt);
     break; case M::Pass: case M::Resign:
       return true;
@@ -325,10 +283,11 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
       return false;
     break; default: assert(false);
     }
+    return false;
   }
-  s::vector<Move> legal_moves() const {
-    if (is_terminal()) return s::vector<Move>();
-    s::vector<Move> moves;
+  MoveList<SZ * SZ + 1> legal_moves() const {
+    MoveList<SZ * SZ + 1> moves;
+    if (is_terminal()) return moves;
 
     if (mHistory.size() > 0){
       if (mHistory.back().move.mty == M::Pass)
@@ -337,9 +296,8 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
         moves.push_back(Move(M::Pass));
     } else
       moves.push_back(Move(M::Pass));
-    const uset<Pt>& pts = mBoard.get_legal_moves(mNPlayer);
-    for (Pt pt : pts)
-      moves.push_back(Move(M::Play, pt));
+    for (uint64_t m = mLegal; m; m &= m - 1)
+      moves.push_back(Move(M::Play, point<SZ>(s::countr_zero(m))));
     return moves;
   }
   bool apply(PlayerMove pm){
@@ -351,44 +309,19 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
       mBoard.place(pm.player, pm.move.mpt);
       mNPlayer = opponent(mNPlayer);
       mHistory.push_back(pm);
-      mTerminal = check_no_more_moves();
-      if (mTerminal){
-        int black_count = mBoard.count_player_piece(Player::Black);
-        int white_count = mBoard.count_player_piece(Player::White);
-        switch ((black_count>white_count) - (white_count>black_count)){
-        case 1:
-          mWinner = Player::Black;
-        break; case 0:
-          mWinner = Player::Unknown;
-        break; case -1:
-          mWinner = Player::White;
-        break; default: assert(false); // should never get here
-        }
-      }
+      update_termination();
       return true;
     break; case M::Pass:
       mNPlayer = opponent(mNPlayer);
       mHistory.push_back(pm);
-      mTerminal = check_no_more_moves();
-      if (mTerminal){
-        int black_count = mBoard.count_player_piece(Player::Black);
-        int white_count = mBoard.count_player_piece(Player::White);
-        switch ((black_count>white_count) - (white_count>black_count)){
-        case 1:
-          mWinner = Player::Black;
-        break; case 0:
-          mWinner = Player::Unknown;
-        break; case -1:
-          mWinner = Player::White;
-        break; default: assert(false); // should never get here
-        }
-      }
+      update_termination();
       return true;
     break; case M::Resign:
       mTerminal = true;
       mWinner = opponent(pm.player);
       mHistory.push_back(pm);
       mNPlayer = opponent(mNPlayer);
+      mLegal = mBoard.legal_mask(mNPlayer);
       return true;
     break; case M::Unknown: default:
       return false;
@@ -400,16 +333,18 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
     for (size_t i = 0; i < n; ++i){
       PlayerMove pm = mHistory.back();
       mHistory.pop_back();
-      //TODO: revert resign ?
-      if (pm.move.mty != M::Play) continue;
-
       if (pm.move.mty == M::Play)
         mBoard.revert(pm.move.mpt);
     }
     if (mHistory.size() > 0) mNPlayer = opponent(mHistory.back().player);
     else                     mNPlayer = Player::Black;
-    mTerminal = check_no_more_moves();
-    if (not mTerminal) mWinner = Player::Unknown;
+    mLegal = mBoard.legal_mask(mNPlayer);
+    // apply() refuses to move from a terminal state, so every earlier state
+    // in the history was still in play
+    if (n > 0){
+      mTerminal = false;
+      mWinner = Player::Unknown;
+    }
   }
   bool is_terminal() const {
     return mTerminal;
@@ -441,14 +376,34 @@ struct OthelloGameState : GameState<OthelloBoard<SZ>, OthelloGameState<SZ>> {
   }
 
 protected:
-  bool check_no_more_moves() const {
-    return mBoard.get_legal_moves(Player::Black).size() +
-           mBoard.get_legal_moves(Player::White).size() == 0;
+  static bool is_on_board(Pt pt){
+    return pt.r >= 0 and pt.r < SZ and pt.c >= 0 and pt.c < SZ;
+  }
+  // terminal when neither side can place; only checks the opponent when the
+  // side to move is stuck
+  void update_termination(){
+    mLegal = mBoard.legal_mask(mNPlayer);
+    mTerminal = mLegal == 0 and mBoard.legal_mask(opponent(mNPlayer)) == 0;
+    if (mTerminal){
+      int black_count = mBoard.count_player_piece(Player::Black);
+      int white_count = mBoard.count_player_piece(Player::White);
+      switch ((black_count>white_count) - (white_count>black_count)){
+      case 1:
+        mWinner = Player::Black;
+      break; case 0:
+        mWinner = Player::Unknown;
+      break; case -1:
+        mWinner = Player::White;
+      break; default: assert(false); // should never get here
+      }
+    }
   }
 
   OthelloBoard<SZ>      mBoard;
   Player                mNPlayer;
   s::vector<PlayerMove> mHistory;
+  // placements for mNPlayer
+  uint64_t              mLegal;
   Player                mWinner;
   bool                  mTerminal;
 };

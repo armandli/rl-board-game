@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <array>
+#include <random>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -97,3 +99,87 @@ TEST(Othello, PassThenResign){
   EXPECT_EQ(g.score(r::Player::White), -1);
   EXPECT_TRUE(g.legal_moves().empty());
 }
+
+namespace {
+
+// legal placements and flips by walking rays square by square, independent of
+// the bitboard engine
+template <ubyte SZ>
+struct NaiveOthello {
+  std::array<r::Player, SZ * SZ> b;
+
+  explicit NaiveOthello(const r::OthelloBoard<SZ>& board){
+    for (uint i = 0; i < SZ * SZ; ++i) b[i] = board[r::point<SZ>(i)];
+  }
+  bool on(int rr, int cc) const { return rr >= 0 and rr < SZ and cc >= 0 and cc < SZ; }
+  r::Player at(int rr, int cc) const { return b[rr * SZ + cc]; }
+  // squares flipped by p placing at (rr, cc)
+  std::vector<int> flips(r::Player p, int rr, int cc) const {
+    std::vector<int> out;
+    if (at(rr, cc) != r::Player::Unknown) return out;
+    for (r::Dr d : r::EIGHT_WAY){
+      std::vector<int> run;
+      int y = rr + d.r, x = cc + d.c;
+      while (on(y, x) and at(y, x) == r::opponent(p)){
+        run.push_back(y * SZ + x);
+        y += d.r; x += d.c;
+      }
+      if (not run.empty() and on(y, x) and at(y, x) == p)
+        out.insert(out.end(), run.begin(), run.end());
+    }
+    return out;
+  }
+  std::vector<int> legal(r::Player p) const {
+    std::vector<int> out;
+    for (int i = 0; i < SZ * SZ; ++i)
+      if (not flips(p, i / SZ, i % SZ).empty()) out.push_back(i);
+    return out;
+  }
+};
+
+template <ubyte SZ>
+void check_against_naive(int games, uint64_t seed){
+  using G = r::OthelloGameState<SZ>;
+  std::mt19937_64 rng(seed);
+  for (int game = 0; game < games; ++game){
+    G g;
+    std::vector<size_t> hashes;
+    while (not g.is_terminal()){
+      NaiveOthello<SZ> ref(g.board());
+      std::vector<int> got;
+      for (const r::Move& m : g.legal_moves())
+        if (m.mty == r::M::Play) got.push_back(r::index<SZ>(m.mpt));
+      std::sort(got.begin(), got.end());
+      ASSERT_EQ(got, ref.legal(g.next_player())) << "game " << game;
+
+      hashes.push_back(g.hash());
+      if (got.empty()){
+        ASSERT_TRUE(g.apply(r::PlayerMove(g.next_player(), r::Move(r::M::Pass))));
+        continue;
+      }
+      int a = got[std::uniform_int_distribution<size_t>(0, got.size() - 1)(rng)];
+      r::Player p = g.next_player();
+      std::vector<int> f = ref.flips(p, a / SZ, a % SZ);
+      ASSERT_TRUE(g.apply(r::PlayerMove(p, r::Move(r::M::Play, r::point<SZ>(a)))));
+      for (int i = 0; i < SZ * SZ; ++i){
+        r::Player want = ref.b[i];
+        if (i == a or std::find(f.begin(), f.end(), i) != f.end()) want = p;
+        ASSERT_EQ(g.board()[r::point<SZ>(i)], want) << "game " << game << " square " << i;
+      }
+    }
+    // unwinding one move at a time revisits every earlier position
+    while (not hashes.empty()){
+      g.rollback(1);
+      ASSERT_FALSE(g.is_terminal());
+      ASSERT_EQ(g.hash(), hashes.back()) << "game " << game;
+      hashes.pop_back();
+    }
+    ASSERT_EQ(g.hash(), G().hash());
+  }
+}
+
+} // namespace
+
+TEST(Othello, MatchesNaiveRules8x8){ check_against_naive<8>(500, 11); }
+TEST(Othello, MatchesNaiveRules6x6){ check_against_naive<6>(500, 12); }
+TEST(Othello, MatchesNaiveRules4x4){ check_against_naive<4>(500, 13); }

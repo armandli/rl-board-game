@@ -23,7 +23,7 @@ Move minimax_search(GameState<Board,Sub>& state){
         return s::make_pair(state.score(player), Move(M::Unknown));
       }
 
-      s::vector<Move> moves = state.legal_moves();
+      auto moves = state.legal_moves();
       s::vector<int> scores;
       for (const Move& move : moves){
         state.apply(PlayerMove(state.next_player(), move));
@@ -61,7 +61,7 @@ Move minimax_search_ab(GameState<Board,Sub>& state){
       if (state.is_terminal())
         return s::make_pair(state.score(player), Move(M::Unknown));
 
-      s::vector<Move> moves = state.legal_moves();
+      auto moves = state.legal_moves();
 
       if (is_maximize){
         int bscore = -1;

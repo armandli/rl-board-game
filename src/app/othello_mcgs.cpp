@@ -43,7 +43,7 @@ fx::Element render_board(const Game& game){
         break;
       default:
         if (not game.is_terminal() and
-            board.get_legal_moves(game.next_player()).contains(pt))
+            board.is_valid(game.next_player(), pt))
           cell = fx::text("+") | fx::color(fx::Color::Cyan);
         else
           cell = fx::text(".");
