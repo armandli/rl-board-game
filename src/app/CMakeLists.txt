@@ -89,6 +89,15 @@ if(TARGET rlbg_libtorch)
   target_link_libraries(othello_muzero_torch_train rlbg_libtorch CLI11::CLI11)
 endif()
 
+# MuZero self-play training for Wall Go v1 on LibTorch
+if(TARGET rlbg_libtorch)
+  add_executable(wall_go_v1_muzero_torch_train wall_go_v1_muzero_torch_train.cpp)
+
+  set_property(TARGET wall_go_v1_muzero_torch_train PROPERTY CXX_STANDARD 26)
+
+  target_link_libraries(wall_go_v1_muzero_torch_train rlbg_libtorch CLI11::CLI11)
+endif()
+
 if(TARGET rlbg_libtorch)
   add_executable(othello_muzero_torch_bench othello_muzero_torch_bench.cpp)
 

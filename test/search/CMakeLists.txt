@@ -1,4 +1,5 @@
-if(NOT TARGET search)
+# MLX suite: the search tests run against the MLX true_model fixture
+if(NOT TARGET model)
   return()
 endif()
 

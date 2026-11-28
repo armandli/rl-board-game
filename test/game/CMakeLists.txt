@@ -4,6 +4,7 @@ rlbg_add_test(game_test
     othello_test.cpp
     othello_bitboard_test.cpp
     connectx_test.cpp
+    wall_go_v1_test.cpp
     classic_search_test.cpp
   LIBS util game
 )
