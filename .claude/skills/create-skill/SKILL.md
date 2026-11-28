@@ -177,7 +177,7 @@ If a skill exceeds these limits, split into references or consider breaking into
 - `$1`, `$2` — shorthand for positional args
 - `${CLAUDE_SESSION_ID}` — current session ID
 
-**Dynamic context injection**: You can run a shell command while the skill loads and splice its stdout into the content. Prefix a single-backtick-quoted command with a bang (the exclamation-mark character); its output replaces that placeholder before the content is sent to Claude. This document deliberately avoids writing the bang-backtick form literally inline, because the skill loader would try to execute it and fail with a "Shell command permission check failed for pattern" error.
+**Dynamic context injection**: Write an exclamation mark immediately followed by a backtick-quoted shell command. The harness executes the command at skill-load time and substitutes its output before the content reaches Claude.
 
 **Extended thinking**: Include the word "ultrathink" anywhere in skill content to enable extended thinking mode.
 
